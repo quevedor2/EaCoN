@@ -1,5 +1,14 @@
 ## ASCAT L2R + BAF segmentation
-Segment.ASCAT <- function(data = NULL, mingap = 5E+06, smooth.k = NULL, BAF.filter = .75, homoCut = .05, penalty = 50, recenter = "l2r.centeredpeak", calling.method = "mad", nrf = .5, SER.pen = 40, out.dir = getwd(), return.data = FALSE, write.data = TRUE, plot = TRUE, force = FALSE) {
+Segment.ASCAT <- function(data = NULL, mingap = 5E+06, 
+                          smooth.k = NULL, BAF.filter = .75, 
+                          homoCut = .05, penalty = 50, 
+                          recenter = "l2r.centeredpeak", 
+                          calling.method = "mad", 
+                          nrf = .5, SER.pen = 40, 
+                          out.dir = getwd(), 
+                          return.data = FALSE, 
+                          write.data = TRUE, 
+                          plot = TRUE, force = FALSE) {
   
   # setwd("/home/job/Documents/ROSCOFF/Roscoff_2018/TP_CNV/WES/REDUX/A18R.11.17.18")
   # data <- readRDS("A18R.11.17.18_hs37d5_b50_processed.RDS")
@@ -66,17 +75,17 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06, smooth.k = NULL, BAF.filt
   
   setwd(odir)
   
-  data$meta$eacon <- c(data$meta$eacon, list(
-    "segmenter" = "ASCAT",
-    "mingap" = mingap,
-    "BAF.filter" = BAF.filter,
-    "BAF.segments.homo.limit" = homoCut,
-    "winsorize.k" = if(is.null(smooth.k)) "NA" else smooth.k,
-    "ASCAT.penalty" = penalty,
-    "calling.method" = calling.method,
-    "calling.nrf" = if(is.null(nrf)) "NA" else nrf,
-    "small.events.rescue.PELT.penalty" = if(is.null(SER.pen)) "NA" else SER.pen
-  ))
+  data$meta$eacon <- c(data$meta$eacon, 
+                       list("segmenter" = "ASCAT",
+                            "mingap" = mingap,
+                            "BAF.filter" = BAF.filter,
+                            "BAF.segments.homo.limit" = homoCut,
+                            "winsorize.k" = if(is.null(smooth.k)) "NA" else smooth.k,
+                            "ASCAT.penalty" = penalty,
+                            "calling.method" = calling.method,
+                            "calling.nrf" = if(is.null(nrf)) "NA" else nrf,
+                            "small.events.rescue.PELT.penalty" = if(is.null(SER.pen)) "NA" else SER.pen
+                            ))
   
   ## BAF scaling
   # if (BAF.rescale) {
@@ -94,8 +103,14 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06, smooth.k = NULL, BAF.filt
   ## Winsorization
   if(!is.null(smooth.k)) {
     tmsg("Smoothing L2R outliers ...")
-    cndf <- data.frame(Chr = rep(unlist(cs$chrom2chr[data$data$chrs]), vapply(data$data$ch, length, 1L)), Position = unlist(data$data$ch), MySample = data$data$Tumor_LogR[[1]], stringsAsFactors = FALSE)
-    cndf.wins <- copynumber::winsorize(data = cndf, pos.unit = "bp", method = "mad", k = smooth.k, tau = 1, verbose = FALSE)
+    cndf <- data.frame(Chr = rep(unlist(cs$chrom2chr[data$data$chrs]), 
+                                 vapply(data$data$ch, length, 1L)), 
+                       Position = unlist(data$data$ch), 
+                       MySample = data$data$Tumor_LogR[[1]], 
+                       stringsAsFactors = FALSE)
+    cndf.wins <- copynumber::winsorize(data = cndf, pos.unit = "bp", 
+                                       method = "mad", k = smooth.k, 
+                                       tau = 1, verbose = FALSE)
     data$data$Tumor_LogR[,1] <- cndf.wins[, 3, drop = FALSE]
     rm(list = c("cndf", "cndf.wins"))
   }
@@ -532,7 +547,17 @@ Segment.FACETS <- function(data = NULL, smooth.k = NULL, BAF.filter = .75, homoC
   
   ### Data conversion
   # F.dmat <- data.frame(chrom = as.integer(data$data$SNPpos$chrs), maploc = as.numeric(data$data$SNPpos$pos), rCountT = data$data$additional$RD.test, rCountN = data$data$additional$RD.ref, vafT = data$data$Tumor_BAF[,1], vafN = NA, het = abs(as.numeric(data$germline$germlinegenotypes)-1), keep = NA, gcpct = NA, gcbias = NA, cnlr = data$data$Tumor_LogR[,1], valor = data$data$additional$LOR, lorvar = data$data$additional$LORvar)
-  F.dmat <- data.frame(chrom = unlist(cs$chrom2chr[as.character(data$data$SNPpos$chrs)]), maploc = as.numeric(data$data$SNPpos$pos), rCountT = data$data$additional$RD.test, rCountN = data$data$additional$RD.ref, vafT = data$data$Tumor_BAF[,1], vafN = NA, het = abs(as.numeric(data$germline$germlinegenotypes)-1), keep = NA, gcpct = NA, gcbias = NA, cnlr = data$data$Tumor_LogR[,1], valor = data$data$additional$LOR, lorvar = data$data$additional$LORvar)
+  F.dmat <- data.frame(chrom = unlist(cs$chrom2chr[as.character(data$data$SNPpos$chrs)]), 
+                       maploc = as.numeric(data$data$SNPpos$pos), 
+                       rCountT = data$data$additional$RD.test, 
+                       rCountN = data$data$additional$RD.ref, 
+                       vafT = data$data$Tumor_BAF[,1],
+                       vafN = NA, 
+                       het = abs(as.numeric(data$germline$germlinegenotypes)-1), 
+                       keep = NA, gcpct = NA, gcbias = NA, 
+                       cnlr = data$data$Tumor_LogR[,1], 
+                       valor = data$data$additional$LOR, 
+                       lorvar = data$data$additional$LORvar)
   
   ### Selection of SNP position to smooth their density
   F.dmat$keep <- if ("germline" %in% names(data)) as.numeric(!unname(data$germline$germlinegenotypes[,1])) else F.dmat$keep <- facets:::scanSnp(maploc = F.dmat$maploc, het = F.dmat$het, nbhd = snp.nbhd)
@@ -1267,7 +1292,8 @@ Segment.ff <- function(RDS.file = NULL, segmenter = "ASCAT", ...) {
   tmsg(paste0("Loading data from ", RDS.file, " ..."))
   my.data <- readRDS(RDS.file)
   # Segment.ASCAT(data = my.data, out.dir = dirname(RDS.file), ...)
-  do.call(paste0("Segment.", toupper(segmenter)), list(data = my.data, out.dir = dirname(RDS.file), ...))
+  do.call(paste0("Segment.", toupper(segmenter)), 
+          list(data = my.data, out.dir = dirname(RDS.file), ...))
 }
 
 ## Run Segment.ff() in batch mode
