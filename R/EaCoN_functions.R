@@ -1314,7 +1314,9 @@ Segment.ff.Batch <- function (RDS.files = list.files(path = getwd(), pattern = "
 }
 
 ## ASCAT Total and Allele-Specific Copy Number
-ASCN.ASCAT <- function(data = NULL, gammaRange = c(.35,.95), nsubthread = 1, cluster.type = "PSOCK", out.dir = getwd(), force = FALSE, ...) {
+ASCN.ASCAT <- function(data = NULL, gammaRange = c(.35,.95), 
+                       nsubthread = 1, cluster.type = "PSOCK", 
+                       out.dir = getwd(), force = FALSE, ...) {
   
   # setwd("/mnt/data_cigogne/job/PUBLI_EaCoN/TCGA/ANALYSES/EaCoN_0.3.0_beta1/WES/TCGA-A7-A0CE-01A_vs_10A/ASCAT/L2R")
   # data <- readRDS("TCGA-A7-A0CE-01A_vs_10A.EaCoN.ASPCF.RDS")
@@ -1365,7 +1367,7 @@ ASCN.ASCAT <- function(data = NULL, gammaRange = c(.35,.95), nsubthread = 1, clu
     odirg <- paste0(odir, "/gamma", sprintf("%.2f", gamma))
     dir.create(path = odirg, recursive = TRUE, showWarnings = FALSE)
     setwd(odirg)
-    my.ascat.seg.ascn <- suppressWarnings(ASCAT::ascat.runAscat(ASCATobj = data$data, gamma = gamma, ...))
+    my.ascat.seg.ascn <- suppressWarnings(ASCAT::ascat.runAscat(ASCATobj = data$data, gamma = gamma))
     
     if (is.null(my.ascat.seg.ascn$nA)) {
       tmsg("  ASCAT could not find an optimal ploidy / cellularity from the data.")
@@ -1577,6 +1579,7 @@ ASCN.ASCAT <- function(data = NULL, gammaRange = c(.35,.95), nsubthread = 1, clu
   rownames(fit.val) <- gammavec
   # colnames(fit.val) <- c("gamma", "ploidy", "rounded.ploidy", "aberrant.cell.fraction", "GoF", "psi")
   colnames(fit.val) <- c("gamma", "ploidy.ASCAT", "ploidy.Median", "ploidy.Most.width", "ploidy.Width.weighted", "aberrant.cell.fraction", "GoF", "psi")
+  
   if (any(!is.na(fit.val$gamma))) {
     fit.val[,1] <- gammavec
     gammaOpt.idx <- which.max(fit.val$GoF)
@@ -1606,6 +1609,7 @@ ASCN.ASCAT <- function(data = NULL, gammaRange = c(.35,.95), nsubthread = 1, clu
   } else {
     tmsg("WARNING : ASCN failed for all evaluated gamma values !")
   }
+  return(fit.val)
 }
 
 ## FACETS Total and Allele-Specific Copy Number
