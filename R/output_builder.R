@@ -1,3 +1,5 @@
+######################################
+#### Load and Clean the ASCAT RDS ####
 loadBestFitRDS <- function(gamma, ...){
   RDS.file <- file.path(sample, toupper(segmenter), 'ASCN', paste0('gamma', format(gamma, nsmall=2)),
                         paste(sample, 'ASCN', toupper(segmenter), 'RDS', sep="."))
@@ -173,18 +175,8 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   return(cl.anno)
 }
 
-
-
-all.fits <- list()
-all.fits[[sample]] <- list("fit"=fit.val,
-                           "sample"=sample)
-gr.cnv <- lapply(all.fits, function(x) annotateRDS(x$fit, x$sample, segmenter, 
-                                                   build='hg19', bin.size=50000))
-cbio.path=file.path("out", "cBio")
-
-buildCbioOut(gr.cnv, cbio.path="./out/cBio", overwrite=sample)
-
-
+############################################
+#### Building cBioportal Output Objects ####
 buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA", 
                          cbio.cna.file=NULL, cbio.linear.file=NULL, cbio.seg.file=NULL,
                          amp.thresh=5, add.on.to.existing=TRUE, ...){
@@ -325,9 +317,42 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
   return(cnv.mat)
 }
 
+#########################################
+#### Building Expression Sets (ESet) ####
 buildPSetOut <- function(){
 
+  cols <- c('nMajor', 'nMinor', 'nAraw', 'nBraw', 'TCN', 'seg.mean')
+  mats <- reduceEsetMats(list(gr.cnv[[1]][['genes']]), cols, features='SYMBOL', ord=TRUE)
+  mats <- reduceEsetMats(list(gr.cnv[[1]][['bins']]), cols, features='ID', keys='ID', ord=TRUE)
   
 }
 
+reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
+                           keys=c("ENTREZ", "SYMBOL", "ENSEMBL")){
+  mt <- lapply(cols, function(each.col, features){
+    print(each.col)
+    m <- suppressWarnings(Reduce(f=function(x,y) merge(x,y,by=keys),
+                                 lapply(gene.lrr, function(i) i[['genes']][,c(keys, each.col)])))
+    if(ord) m <- m[match(gene.lrr[[1]][['genes']][,keys], m[,keys]),]
+    if(any(duplicated(m[,features]))) m <- m[-which(duplicated(m[,features])),]
+    if(any(is.na(m[,features]))) m <- m[-which(is.na(m[,features])),]
+    rownames(m) <- m[,features]
+    m <- m[,-c(1:length(keys))]
+    colnames(m) <- names(gene.lrr) 
+    as.matrix(m)
+  }, features=features)
+  if(length(mt) == 5) mt[[6]] <- mt[[5]] + mt[[4]]
+  mt
+}
 
+
+
+
+all.fits <- list()
+all.fits[[sample]] <- list("fit"=fit.val,
+                           "sample"=sample)
+gr.cnv <- lapply(all.fits, function(x) annotateRDS(x$fit, x$sample, segmenter, 
+                                                   build='hg19', bin.size=50000))
+cbio.path=file.path("out", "cBio")
+
+buildCbioOut(gr.cnv, cbio.path="./out/cBio", overwrite=sample)
