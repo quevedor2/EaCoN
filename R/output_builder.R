@@ -14,7 +14,28 @@ cleanGR <- function(gr0){
   }
   gr0$TCN <- rowSums(as.matrix(elementMetadata(gr0)[,c('nMajor', 'nMinor')]))
   gr0$seg.mean <- round(log2(gr0$TCN / 2),3)
+  gr0$seg.mean[gr0$seg.mean < log2(1/50)] <- round(log2(1/50), 2)
   gr0
+}
+
+getGenes <- function(genome.build="hg19"){
+  switch(genome.build,
+         hg18={ 
+           suppressPackageStartupMessages(require("TxDb.Hsapiens.UCSC.hg18.knownGene"))
+           package <- TxDb.Hsapiens.UCSC.hg18.knownGene 
+         },
+         hg19={ 
+           suppressPackageStartupMessages(require("TxDb.Hsapiens.UCSC.hg19.knownGene"))
+           package <- TxDb.Hsapiens.UCSC.hg19.knownGene 
+         },
+         hg38={ 
+           suppressPackageStartupMessages(require("TxDb.Hsapiens.UCSC.hg38.knownGene"))
+           package <- TxDb.Hsapiens.UCSC.hg38.knownGene 
+         },
+         stop("genome must be hg18, hg19, or hg38"))
+  
+  list(txdb=package,
+       txdb.genes=genes(package))
 }
 
 getMapping <- function(in.col='ENTREZID', 
@@ -122,8 +143,8 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
   list("seg"=cnv, "genes"=seg.anno)  
 }
 
-
-annotateRDS <- function(data, build='hg19', bin.size=50000, ...){
+annotateRDS <- function(fit.val, sample, segmenter, build='hg19', 
+                        bin.size=50000, ...){
   ## Assemble the ASCAT Seg file into a CNV GRanges object
   gamma <- ASCAT.selectBestFit(fit.val, method='GoF')
   my.data <- loadBestFitRDS(gamma)
@@ -146,62 +167,95 @@ annotateRDS <- function(data, build='hg19', bin.size=50000, ...){
                                                       anno=genes$txdb.genes, cols=cols))
   cl.anno$genes$genes <- cl.anno$genes$genes[-which(is.na(cl.anno$genes$genes$SYMBOL)),]
   
+  # Raw seg
+  cl.anno[['seg']] <- as.data.frame(cnv)
+  
   return(cl.anno)
 }
 
-getGenes <- function(genome.build="hg19"){
-  switch(genome.build,
-         hg18={ 
-           suppressPackageStartupMessages(require("TxDb.Hsapiens.UCSC.hg18.knownGene"))
-           package <- TxDb.Hsapiens.UCSC.hg18.knownGene 
-          },
-         hg19={ 
-           suppressPackageStartupMessages(require("TxDb.Hsapiens.UCSC.hg19.knownGene"))
-           package <- TxDb.Hsapiens.UCSC.hg19.knownGene 
-           },
-         hg38={ 
-           suppressPackageStartupMessages(require("TxDb.Hsapiens.UCSC.hg38.knownGene"))
-           package <- TxDb.Hsapiens.UCSC.hg38.knownGene 
-           },
-         stop("genome must be hg18, hg19, or hg38"))
+
+
+all.fits <- list()
+all.fits[[sample]] <- list("fit"=fit.val,
+                           "sample"=sample)
+gr.cnv <- lapply(all.fits, function(x) annotateRDS(x$fit, x$sample, segmenter, 
+                                                   build='hg19', bin.size=50000))
+cbio.path=file.path("out", "cBio")
+
+
+
+
+buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA", 
+                         cbio.cna.file=NULL, cbio.linear.file=NULL, cbio.seg.file=NULL,
+                         amp.thresh=5, ...){
+  .checkFile <- function(cbio.path, file.id, pat){
+    idx <- grep(list.files(cbio.path), pattern=pat, perl=TRUE)[1]
+    if(!is.na(idx)){
+      cbio.file <- list.files(cbio.path)[idx]
+      exists.stat <- TRUE
+    } else {
+      cbio.file <- file.id
+      exists.stat <- FALSE
+    }
+    c('file'=cbio.file, 'exists'=exists.stat)
+  }
   
-  list(txdb=package,
-       txdb.genes=genes(package))
-}
-
-annotateSegments <- function(cn.data, genes, ...){
-  suppressPackageStartupMessages(require(org.Hs.eg.db))
-  suppressPackageStartupMessages(require(GenomicRanges))
-  suppressPackageStartupMessages(require(AnnotationDbi))
-  gr0 <- cn.data
-  if(class(cn.data) != 'GRanges') gr0 <- makeGRangesFromDataFrame(cn.data, keep.extra.columns=TRUE, ...)
-  #if(class(gr0) != 'GRanges') stop("Input data could not be converted to a GRanges object")
-  seqlevelsStyle(gr0) <- "UCSC"  # current: NCBI
-  if(is(genes, "TxDb")) anno = genes(genes) else anno=genes
+  .adjustCnaMat <- function(cnv.mat, mat.type, amp.thresh=NULL, ord=NULL){
+    tcn.mat <- cnv.mat[,-c(1,2),drop=FALSE]
+    if(mat.type=='CNA'){
+      ## Convert Total CN to the -2, -1, 0, 1, 2, standards
+      tcn.mat[tcn.mat >= amp.thresh] <- amp.thresh
+      tcn.mat <- tcn.mat - 2
+      for(i in c(1:(amp.thresh-3))){ tcn.mat[tcn.mat == i] <- 1 }
+      tcn.mat[tcn.mat == (amp.thresh-2)] <- 2
+    } else if(mat.type=='linear') {
+      tcn.mat <- round(tcn.mat, 2)
+    }
+    
+    ## Recombine the CNV mat
+    colnames(tcn.mat) <- names(gr.cnv)
+    cnv.mat <- cbind(cnv.mat[,c(1:2)], tcn.mat)
+    
+    ## Set the order
+    if(is.null(ord)){
+      cnv.mat <- cnv.mat[order(cnv.mat$SYMBOL),]
+    } else {
+      cnv.mat <- cnv.mat[match(ord, cnv.mat$SYMBOL),]
+      na.idx <- apply(cnv.mat, 1, function(x) all(is.na(x)))
+      if(any(na.idx)) cnv.mat <- cnv.mat[-which(na.idx),]
+    }
+    return(cnv.mat)
+  }
   
-  olaps <- findOverlaps(anno, gr0, type="any")
-  idx <- factor(subjectHits(olaps), levels=seq_len(subjectLength(olaps)))
-  gr0$gene_ids <- splitAsList(anno$gene_id[queryHits(olaps)], idx)
-  gr0$gene_ids <- lapply(gr0$gene_ids, function(input.id) {
-    if(length(input.id) > 0){ 
-      tryCatch({
-        suppressMessages(mapIds(org.Hs.eg.db,
-                                keys=input.id,
-                                column="SYMBOL",
-                                keytype="ENTREZID",
-                                multiVals="first"))
-      }, error=function(e){NULL})
-    } else { NA }
-  })
-  return(gr0)
-}
+  tmsg(paste0("Building a cBioportal Object..."))
+  ## Locating existing cBioportal Objects
+  suppressWarnings(dir.create(cbio.path, recursive = TRUE))
+  if(is.null(cbio.cna.file)){
+    cbio.cna.file <- .checkFile(cbio.path, 'data_CNA.txt',   pat=paste0("(?<!linear)", pattern))
+  }
+  if(is.null(cbio.linear.file)){
+    cbio.linear.file <- .checkFile(cbio.path, 'data_linear_CNA.txt',   pat=paste0("linear", pattern))
+  }
+  if(is.null(cbio.seg.file)){
+    cbio.seg.file <- .checkFile(cbio.path, 'data_cna_hg19.seg',   pat='seg$')
+  }
 
+  ## Create the data_CNA.txt file: https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats#discrete-copy-number-data
+  cna.mat <- Reduce(function(x,y) merge(x,y, by=c('SYMBOL', 'ENTREZ'), all.x=TRUE, all.y=TRUE),
+                    lapply(gr.cnv, function(cnv){ cnv$genes$genes[,c('SYMBOL', 'ENTREZ', 'TCN')]}))
+  cna.mat <- .adjustCnaMat(cna.mat, mat.type = 'CNA', amp.thresh = amp.thresh, ord = NULL)
 
-
-
-
-
-buildCbioOut <- function(){
+  ## Create the data_linear_CNA.txt file: https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats#continuous-copy-number-data
+  linear.mat <- Reduce(function(x,y) merge(x,y, by=c('SYMBOL', 'ENTREZ'), all.x=TRUE),
+                       lapply(gr.cnv, function(cnv){ cnv$genes$genes[,c('SYMBOL', 'ENTREZ', 'seg.mean')]}))
+  linear.mat <- .adjustCnaMat(linear.mat, mat.type = 'linear', ord = cna.mat$SYMBOL)
+  
+  ## Create the data_cna_hg19.seg data file: https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats#segmented-data
+  segs <- do.call("rbind", lapply(gr.cnv, function(x) x$seg))
+  segs$ID <- gsub(".[0-9]*$", "", rownames(segs))
+  segs <- segs[,c('ID', 'seqnames', 'start', 'end', 'width', 'seg.mean')]
+  colnames(segs) <- c('ID', 'chrom', 'loc.start', 'loc.end', 'num.mark', 'seg.mean')
+  
   
 }
 
