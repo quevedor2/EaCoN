@@ -182,12 +182,12 @@ gr.cnv <- lapply(all.fits, function(x) annotateRDS(x$fit, x$sample, segmenter,
                                                    build='hg19', bin.size=50000))
 cbio.path=file.path("out", "cBio")
 
-
+buildCbioOut(gr.cnv, cbio.path="./out/cBio", overwrite=sample)
 
 
 buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA", 
                          cbio.cna.file=NULL, cbio.linear.file=NULL, cbio.seg.file=NULL,
-                         amp.thresh=5, ...){
+                         amp.thresh=5, add.on.to.existing=TRUE, ...){
   .checkFile <- function(cbio.path, file.id, pat){
     idx <- grep(list.files(cbio.path), pattern=pat, perl=TRUE)[1]
     if(!is.na(idx)){
@@ -214,13 +214,14 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
     
     ## Recombine the CNV mat
     colnames(tcn.mat) <- names(gr.cnv)
+    colnames(cnv.mat)[c(1,2)] <- c('Hugo_Symbol', 'Entrez_Gene_Id')
     cnv.mat <- cbind(cnv.mat[,c(1:2)], tcn.mat)
     
     ## Set the order
     if(is.null(ord)){
-      cnv.mat <- cnv.mat[order(cnv.mat$SYMBOL),]
+      cnv.mat <- cnv.mat[order(cnv.mat$Hugo_Symbol),]
     } else {
-      cnv.mat <- cnv.mat[match(ord, cnv.mat$SYMBOL),]
+      cnv.mat <- cnv.mat[match(ord, cnv.mat$Hugo_Symbol),]
       na.idx <- apply(cnv.mat, 1, function(x) all(is.na(x)))
       if(any(na.idx)) cnv.mat <- cnv.mat[-which(na.idx),]
     }
@@ -248,7 +249,7 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
   ## Create the data_linear_CNA.txt file: https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats#continuous-copy-number-data
   linear.mat <- Reduce(function(x,y) merge(x,y, by=c('SYMBOL', 'ENTREZ'), all.x=TRUE),
                        lapply(gr.cnv, function(cnv){ cnv$genes$genes[,c('SYMBOL', 'ENTREZ', 'seg.mean')]}))
-  linear.mat <- .adjustCnaMat(linear.mat, mat.type = 'linear', ord = cna.mat$SYMBOL)
+  linear.mat <- .adjustCnaMat(linear.mat, mat.type = 'linear', ord = cna.mat$Hugo_Symbol)
   
   ## Create the data_cna_hg19.seg data file: https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats#segmented-data
   segs <- do.call("rbind", lapply(gr.cnv, function(x) x$seg))
@@ -256,7 +257,72 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
   segs <- segs[,c('ID', 'seqnames', 'start', 'end', 'width', 'seg.mean')]
   colnames(segs) <- c('ID', 'chrom', 'loc.start', 'loc.end', 'num.mark', 'seg.mean')
   
+  ## If existing cBio objects exist, append to the existing data structure
+  if(add.on.to.existing){
+    if(as.logical(cbio.cna.file['exists'])){
+      cna.mat <- .appendToCbioMat(cbio.path, cbio.cna.file, cna.mat, ...)
+    }
+    if(as.logical(cbio.linear.file['exists'])){
+      linear.mat <- .appendToCbioMat(cbio.path, cbio.linear.file, linear.mat, ...)
+    }
+    if(as.logical(cbio.seg.file['exists'])){
+      segs <- .appendToCbioSeg(cbio.path, cbio.seg.file, segs, ...)
+    }
+  }
   
+  ## Write cBioportal Matrices
+  .write <- function(...){
+    write.table(..., sep="\t", col.names=TRUE, row.names=FALSE, quote=F)
+  }
+  .write(x=segs, file=file.path(cbio.path, cbio.seg.file['file']))
+  .write(x=cna.mat, file=file.path(cbio.path, cbio.cna.file['file']))
+  .write(x=linear.mat, file=file.path(cbio.path, cbio.linear.file['file']))
+}
+
+.appendToCbioSeg <- function(cbio.path, cbio.file, seg, overwrite=NULL){
+  exist.seg <- read.table(file.path(cbio.path, cbio.file['file']), sep="\t", header=T,
+                          stringsAsFactors = F, check.names = F, fill=F)
+  exist.spl <- split(exist.seg, f=exist.seg$ID)
+  if(!is.null(overwrite)) {
+    ov.idx <- sapply(overwrite, function(id) grep(id, names(exist.spl)))
+    tmsg(paste0("Overwriting samples: ", paste(names(exist.spl)[ov.idx], collapse=",")))
+    exist.spl[ov.idx] <- NULL
+  }
+  
+  new.spl <- split(seg, f=seg$ID)
+  new.ids <- which(!names(new.spl) %in% names(exist.spl))
+  
+  if(length(new.ids) > 0){
+    tmsg(paste0("New samples being added to cBio Seg file : ", 
+                paste(names(new.spl)[new.ids], collapse=",")))
+    seg <- do.call(rbind, append(new.spl[new.ids], exist.spl))
+  } else {
+    tmsg("No new samples to add.  If you want to replace an existing sample, please specify 
+         using overwrite=c('SampleA', 'SampleB')")
+  }
+  return(seg)
+}
+
+.appendToCbioMat <- function(cbio.path, cbio.file, cnv.mat, overwrite=NULL){
+  exist.cna <- read.table(file.path(cbio.path, cbio.file['file']), sep="\t", header=T,
+                          stringsAsFactors = F, check.names = F, fill=F)
+  if(!is.null(overwrite)) {
+    ov.idx <- sapply(overwrite, function(id) grep(id, colnames(exist.cna)))
+    tmsg(paste0("Overwriting samples: ", paste(colnames(exist.cna)[ov.idx], collapse=",")))
+    exist.cna <- exist.cna[,-ov.idx]
+  }
+  new.cols <- which(!colnames(cnv.mat) %in% colnames(exist.cna))
+  
+  if(length(new.cols) > 0){
+    tmsg(paste0("New samples being added to cBio CNA matrices: ", 
+                paste(colnames(cnv.mat)[new.cols], collapse=",")))
+    cnv.mat <- merge(exist.cna, cnv.mat[,c(1,2, new.cols)], 
+                     by=c('Hugo_Symbol', 'Entrez_Gene_Id'), all.x=TRUE)
+  } else {
+    tmsg("No new samples to add.  If you want to replace an existing sample, please specify 
+         using overwrite=c('SampleA', 'SampleB')")
+  }
+  return(cnv.mat)
 }
 
 buildPSetOut <- function(){
