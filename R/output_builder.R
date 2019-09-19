@@ -5,6 +5,25 @@ loadBestFitRDS <- function(gamma, ...){
   return(rds)
 }
 
+cleanGR <- function(gr0){
+  for(i in c(1:ncol(elementMetadata(gr0)))){
+    icol <- elementMetadata(gr0)[,i]
+    if(class(icol)=='numeric'){
+      elementMetadata(gr0)[,i] <- round(icol, 3)
+    }
+  }
+  gr0$TCN <- rowSums(as.matrix(elementMetadata(gr0)[,c('nMajor', 'nMinor')]))
+  gr0$seg.mean <- round(log2(gr0$TCN / 2),3)
+  gr0
+}
+
+getMapping <- function(in.col='ENTREZID', 
+                       out.cols=c("SYMBOL", "ENSEMBL")){
+  gene.map <- select(org.Hs.eg.db, keys=keys(org.Hs.eg.db, in.col), 
+                     keytype="ENTREZID", columns=out.cols)
+  gene.map
+}
+
 ASCAT.selectBestFit <- function(fit.val, method='GoF'){
   idx <- switch(method,
                 "GoF"=which.max(fit.val$GoF),
@@ -70,33 +89,57 @@ segmentCNVs <- function(cnv, bed, reduce='mean'){
   return(list(seg=bed, genes=em))
 }
 
+annotateCNVs <- function(cnv, txdb, anno=NULL,
+                         cols=c("seg.mean", "nA", "nB")){
+  stopifnot(is(cnv, "GRanges"), is(txdb, "TxDb"))
+  
+  ## Assign EntrezID to each segment 
+  if(is.null(anno)) anno = genes(txdb)
+  olaps = findOverlaps(cnv, anno)
+  mcols(olaps)$gene_id = anno$gene_id[subjectHits(olaps)]  # Fixed the code here
+  cnv_factor = factor(queryHits(olaps), levels=seq_len(queryLength(olaps)))
+  cnv$gene_id = IRanges::splitAsList(mcols(olaps)$gene_id, cnv_factor)
+  
+  ## Assign EntrezID to each segment 
+  seg.entrez <- apply(as.data.frame(mcols(cnv)), 1, function(i){
+    ids <- unlist(strsplit(x = as.character(unlist(i[['gene_id']])), split=","))
+    segs <- do.call(rbind, replicate(length(ids), round(unlist(i[cols]),3), simplify = FALSE))
+    
+    as.data.frame(cbind(segs, 'ENTREZ'=ids))
+  })
+  seg.entrez <- do.call(rbind, seg.entrez)
+  if(any(duplicated(seg.entrez$ENTREZ))) seg.entrez <- seg.entrez[-which(duplicated(seg.entrez$ENTREZ)),]
+  
+  
+  ## Map ensembl and HUGO IDs to the ENTREZ ids
+  seg.anno <- merge(seg.entrez, getMapping(),
+                    by.x="ENTREZ", by.y="ENTREZID", all.x=TRUE)
+  seg.anno <- seg.anno[-which(duplicated(seg.anno$ENTREZ)),]
+  for(each.col in cols){
+    seg.anno[,each.col] <- as.numeric(as.character(seg.anno[,each.col]))
+  }
+  
+  list("seg"=cnv, "genes"=seg.anno)  
+}
 
-annotateRDS <- function(data, build='hg19', ...){
+
+annotateRDS <- function(data, build='hg19', bin.size=50000, ...){
   gamma <- ASCAT.selectBestFit(fit.val, method='GoF')
   my.data <- loadBestFitRDS(gamma)
   genes <- getGenes(build)
   
   tmsg(paste0("Annotating sample: ", sample, "..."))
-  gr0 <- makeGRangesFromDataFrame(my.data$segments_raw, keep.extra.columns=TRUE, 
+  cnv <- makeGRangesFromDataFrame(my.data$segments_raw, keep.extra.columns=TRUE, 
                                   start.field='startpos', end.field='endpos')
+  cnv <- cleanGR(cnv)
   
-  seg <- annotateSegments(my.data$segments_raw, genes,
-                          start.field='startpos', end.field='endpos')
-  
-  bin.size <- 50000
   windowed.bed <- genWindowedBed(bin.size=bin.size)
+  cl.anno <- segmentCNVs(cnv, windowed.bed, reduce='min')
   
-  if(map.to=='bin'){
-    # Map CNV segments to a reference bed
-    cl.anno <- segmentCNVs(gr0, windowed.bed, reduce='min')
-  } else if(map.to == 'genes'){
-    # Map CNV segments to genes
-    cl.anno <- suppressMessages(annotateCnvs(cnv, txdb, 
-                                             anno=txdb.genes,
-                                             cols=cols))
-    names(cl.anno) <- c('seg', 'genes')
-  }
-  
+  cols <- c('nMajor', 'nMinor', 'nAraw', 'nBraw', 'TCN', 'seg.mean')
+  cl.anno <- suppressMessages(annotateCNVs(cnv, genes$txdb, 
+                                           anno=genes$txdb.genes, cols=cols))
+  cl.anno$genes <- cl.anno$genes[-which(is.na(cl.anno$genes$SYMBOL)),]
 }
 
 getGenes <- function(genome.build="hg19"){
@@ -115,11 +158,8 @@ getGenes <- function(genome.build="hg19"){
            },
          stop("genome must be hg18, hg19, or hg38"))
   
-  genes0 <- genes(package)
-  idx <- rep(seq_along(genes0), elementNROWS(genes0$gene_id))
-  genes <- granges(genes0)[idx]
-  genes$gene_id = unlist(genes0$gene_id)
-  genes
+  list(txdb=package,
+       txdb.genes=genes(package))
 }
 
 annotateSegments <- function(cn.data, genes, ...){
