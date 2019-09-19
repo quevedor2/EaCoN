@@ -124,6 +124,7 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
 
 
 annotateRDS <- function(data, build='hg19', bin.size=50000, ...){
+  ## Assemble the ASCAT Seg file into a CNV GRanges object
   gamma <- ASCAT.selectBestFit(fit.val, method='GoF')
   my.data <- loadBestFitRDS(gamma)
   genes <- getGenes(build)
@@ -133,13 +134,19 @@ annotateRDS <- function(data, build='hg19', bin.size=50000, ...){
                                   start.field='startpos', end.field='endpos')
   cnv <- cleanGR(cnv)
   
+  ## Annotate the CNVs based on:
+  cl.anno <- list()
+  # Bins
   windowed.bed <- genWindowedBed(bin.size=bin.size)
-  cl.anno <- segmentCNVs(cnv, windowed.bed, reduce='min')
+  cl.anno[['bins']] <- segmentCNVs(cnv, windowed.bed, reduce='min')
   
+  # Genes
   cols <- c('nMajor', 'nMinor', 'nAraw', 'nBraw', 'TCN', 'seg.mean')
-  cl.anno <- suppressMessages(annotateCNVs(cnv, genes$txdb, 
-                                           anno=genes$txdb.genes, cols=cols))
-  cl.anno$genes <- cl.anno$genes[-which(is.na(cl.anno$genes$SYMBOL)),]
+  cl.anno[['genes']] <- suppressMessages(annotateCNVs(cnv, genes$txdb, 
+                                                      anno=genes$txdb.genes, cols=cols))
+  cl.anno$genes$genes <- cl.anno$genes$genes[-which(is.na(cl.anno$genes$genes$SYMBOL)),]
+  
+  return(cl.anno)
 }
 
 getGenes <- function(genome.build="hg19"){
