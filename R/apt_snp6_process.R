@@ -1,5 +1,13 @@
 ## Performs CS CEL processing
-SNP6.Process <- function(CEL = NULL, samplename = NULL, l2r.level = "normal", gc.renorm = TRUE, gc.rda = NULL, wave.renorm = TRUE, wave.rda = NULL, mingap = 1E+06, out.dir = getwd(), oschp.keep = FALSE, force.OS = NULL, apt.version = "1.20.0", apt.build = "na35.r1", genome.pkg = "BSgenome.Hsapiens.UCSC.hg19", return.data = FALSE, write.data = TRUE, plot = TRUE, force = FALSE) {
+SNP6.Process <- function(CEL = NULL, samplename = NULL, 
+                         l2r.level = "normal", method="rawcopy",
+                         gc.renorm = TRUE, gc.rda = NULL, wave.renorm = TRUE, 
+                         wave.rda = NULL, mingap = 1E+06, 
+                         out.dir = getwd(), oschp.keep = FALSE, 
+                         force.OS = NULL, apt.version = "1.20.0", 
+                         apt.build = "na35.r1", genome.pkg = "BSgenome.Hsapiens.UCSC.hg19", 
+                         return.data = FALSE, write.data = TRUE, 
+                         plot = TRUE, force = FALSE) {
 
   # setwd("/home/job/WORKSPACE/EaCoN_tests/SNP6")
   # CEL <- "GSM820994.CEL.bz2"
@@ -53,7 +61,7 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL, l2r.level = "normal", gc
   if (!arraytype.cel %in% sup.array) stop(tmsg(paste0("Identified array type '", arraytype.cel, "' is not supported by this function !")), call. = FALSE)
 
   ## Checking APT version compatibility
-  valid.apt.versions <- c("1.20.0")
+  valid.apt.versions <- c("1.20.0", "geno_summ.1.20.0")
   if (!(apt.version %in% valid.apt.versions)) warning(tmsg(paste0("APT version ", apt.version, " is not supported. Program may fail !")))
 
   ## Checking build compatibility
@@ -64,17 +72,25 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL, l2r.level = "normal", gc
   apt.snp6.pkg.name <- paste0("apt.snp6.", apt.version)
   if (!(apt.snp6.pkg.name %in% installed.packages())) stop(tmsg(paste0("Package ", apt.snp6.pkg.name, " not found !")), call. = FALSE)
   suppressPackageStartupMessages(require(package = apt.snp6.pkg.name, character.only = TRUE))
-
-  ## Processing CEL to an OSCHP file
-  oscf <- apt.snp6.process(CEL = CEL, samplename = samplename, out.dir = out.dir, temp.files.keep = FALSE, force.OS = force.OS, apt.build = apt.build)
-
-  ## Reading OSCHP
-  # tmsg("Loading OSCHP file ...")
-  my.oschp <- oschp.load(file = oscf)
-  sex.chr <- c("chrX", "chrY")
   
-  ## Processing : meta (and checks)
-  if (!("affymetrix-chipsummary-snp-qc" %in% names(my.oschp$Meta$analysis))) my.oschp$Meta$analysis[["affymetrix-chipsummary-snp-qc"]] <- NA
+  ## Processing CEL to an OSCHP file
+  if(method=='rawcopy'){
+    oscf <- apt.snp6.process(CEL = CEL, samplename = samplename, out.dir = out.dir, temp.files.keep = FALSE, force.OS = force.OS, apt.build = apt.build)
+    
+    ## Reading OSCHP
+    # tmsg("Loading OSCHP file ...")
+    my.oschp <- oschp.load(file = oscf)
+    sex.chr <- c("chrX", "chrY")
+    
+    ## Processing : meta (and checks)
+    if (!("affymetrix-chipsummary-snp-qc" %in% names(my.oschp$Meta$analysis))) my.oschp$Meta$analysis[["affymetrix-chipsummary-snp-qc"]] <- NA
+  } else if(method=='hapseg'){
+    ## Checking apt-copynumber-cyto-ssa package loc
+    apt.snp6.pkg.name <- paste0("apt.snp6.", apt.version)
+    if (!(apt.snp6.pkg.name %in% installed.packages())) stop(tmsg(paste0("Package ", apt.snp6.pkg.name, " not found !")), call. = FALSE)
+    suppressPackageStartupMessages(require(package = apt.snp6.pkg.name, character.only = TRUE))
+    
+  }
   
   ### Loading genome info
   tmsg(paste0("Loading ", genome.pkg, " ..."))
