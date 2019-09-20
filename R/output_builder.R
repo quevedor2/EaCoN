@@ -323,10 +323,44 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
 #### Building Expression Sets (ESet) ####
 buildPSetOut <- function(){
 
-  cols <- c('nMajor', 'nMinor', 'nAraw', 'nBraw', 'TCN', 'seg.mean')
+  #### Assemble the assayData environment ####
+  cols <- c('seg.mean', 'nAraw', 'nBraw', 'nMinor', 'nMajor', 'TCN')
   gene.mats <- reduceEsetMats(list(gr.cnv[[1]][['genes']]), cols, keys='SYMBOL', features='SYMBOL', ord=TRUE)
+  names(gene.mats) <- cols
+  gene.env <- .createEsetEnv(gene.mats, 'seg.mean')
+    
   bin.mats <- reduceEsetMats(list(gr.cnv[[1]][['bins']]), cols, features='ID', keys='ID', ord=TRUE)
+  names(bin.mats) <- cols
+  bin.env <- .createEsetEnv(bin.mats, 'seg.mean')
   
+  #### Assemble PhenoData ####
+  meta <- read.table(metadata, sep=",", header=TRUE,
+                     stringsAsFactors = FALSE, check.names = FALSE)
+  meta$INVENTORY_SAMPLE_NAME <- gsub("Jurkat,", "Jurkat", meta$INVENTORY_SAMPLE_NAME)
+  meta <- as.data.frame(meta[match(names(cnseg.list), meta$INVENTORY_SAMPLE_NAME),])
+  rownames(meta) <- as.character(meta$INVENTORY_SAMPLE_NAME)
+  cl.phenoData <- new("AnnotatedDataFrame", data=meta)
+  
+  
+  #### Assemble the eset #### 
+  cl.eset <- ExpressionSet(assayData=eset.env,
+                           phenoData=cl.phenoData,
+                           annotation=anno.name,
+                           featureData=fdata)
+  
+}
+
+.createEsetEnv <- function(mats, exprs.id='seg.mean'){
+  eset.env <- new.env()
+  exprs.idx <- grep(exprs.id, names(mats))
+  nonexprs.idx <- c(1:length(mats))[-exprs.idx]
+  
+  assign("exprs", mats[[exprs.idx]], envir=eset.env)
+  for(idx in nonexprs.idx){
+    assign(names(mats)[idx], mats[[idx]], envir=eset.env)
+  }
+  
+  return(eset.env)
 }
 
 reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
