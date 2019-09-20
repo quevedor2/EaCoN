@@ -15,7 +15,7 @@ cleanGR <- function(gr0){
     }
   }
   gr0$TCN <- rowSums(as.matrix(elementMetadata(gr0)[,c('nMajor', 'nMinor')]))
-  gr0$seg.mean <- round(log2(gr0$TCN / 2),3)
+  gr0$seg.mean <- round(log2(rowSums(as.matrix(elementMetadata(gr0)[,c('nAraw', 'nBraw')])) / 2),3)
   gr0$seg.mean[gr0$seg.mean < log2(1/50)] <- round(log2(1/50), 2)
   gr0
 }
@@ -42,6 +42,7 @@ getGenes <- function(genome.build="hg19"){
 
 getMapping <- function(in.col='ENTREZID', 
                        out.cols=c("SYMBOL", "ENSEMBL")){
+  suppressPackageStartupMessages(require(org.Hs.eg.db))
   gene.map <- select(org.Hs.eg.db, keys=keys(org.Hs.eg.db, in.col), 
                      keytype="ENTREZID", columns=out.cols)
   gene.map
@@ -55,6 +56,7 @@ ASCAT.selectBestFit <- function(fit.val, method='GoF'){
 }
 
 genWindowedBed <- function(bin.size=1000000, seq.style="UCSC"){
+  suppressPackageStartupMessages(require(BSgenome.Hsapiens.UCSC.hg19))
   chrs <- seqlengths(Hsapiens)[paste0("chr", c(1:22,"X", "Y"))]
   
   ## Construct intervals across the genome of a certain bin size
@@ -322,8 +324,8 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
 buildPSetOut <- function(){
 
   cols <- c('nMajor', 'nMinor', 'nAraw', 'nBraw', 'TCN', 'seg.mean')
-  mats <- reduceEsetMats(list(gr.cnv[[1]][['genes']]), cols, features='SYMBOL', ord=TRUE)
-  mats <- reduceEsetMats(list(gr.cnv[[1]][['bins']]), cols, features='ID', keys='ID', ord=TRUE)
+  gene.mats <- reduceEsetMats(list(gr.cnv[[1]][['genes']]), cols, keys='SYMBOL', features='SYMBOL', ord=TRUE)
+  bin.mats <- reduceEsetMats(list(gr.cnv[[1]][['bins']]), cols, features='ID', keys='ID', ord=TRUE)
   
 }
 
@@ -348,11 +350,19 @@ reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
 
 
 
+### Temp
+fp <- file.path(sample, "ASCAT", "ASCN", paste0(sample, ".gammaEval.txt"))
+fit.val <- read.table(fp, sep="\t", header=TRUE, stringsAsFactors = F,
+                      check.names = F, fill=T)
+###
+
 all.fits <- list()
 all.fits[[sample]] <- list("fit"=fit.val,
                            "sample"=sample)
 gr.cnv <- lapply(all.fits, function(x) annotateRDS(x$fit, x$sample, segmenter, 
                                                    build='hg19', bin.size=50000))
 cbio.path=file.path("out", "cBio")
+
+buildCbioOut(gr.cnv, cbio.path="./out/cBio", overwrite=sample)
 
 buildCbioOut(gr.cnv, cbio.path="./out/cBio", overwrite=sample)
