@@ -323,16 +323,30 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
 #### Building Expression Sets (ESet) ####
 buildPSetOut <- function(){
 
-  #### Assemble the assayData environment ####
+  #### Assemble assayData environment ####
   cols <- c('seg.mean', 'nAraw', 'nBraw', 'nMinor', 'nMajor', 'TCN')
-  gene.mats <- reduceEsetMats(list(gr.cnv[[1]][['genes']]), cols, keys='SYMBOL', features='SYMBOL', ord=TRUE)
+  gene.mats <- reduceEsetMats(list(YT_4941=gr.cnv[[1]][['genes']]), cols, keys='SYMBOL', features='SYMBOL', ord=TRUE)
   names(gene.mats) <- cols
   gene.env <- .createEsetEnv(gene.mats, 'seg.mean')
     
-  bin.mats <- reduceEsetMats(list(gr.cnv[[1]][['bins']]), cols, features='ID', keys='ID', ord=TRUE)
+  bin.mats <- reduceEsetMats(list(YT_4941=gr.cnv[[1]][['bins']]), cols, features='ID', keys='ID', ord=TRUE)
   names(bin.mats) <- cols
   bin.env <- .createEsetEnv(bin.mats, 'seg.mean')
   
+  
+  #### Assemble featureData #### 
+  bins.fdata <- AnnotatedDataFrame(data=as.data.frame(gr.cnv[[1]][['bins']])[,1:6],
+                                   varMetadata=data.frame(labelDescription=c(
+                                     "Chromosome", "Bin start", "Bin end", 
+                                     "Bin width", "Strand", "Unique bin ID")))
+  rownames(bins.fdata) <- rownames(bin.env$exprs)
+  
+  gene.fdata <- AnnotatedDataFrame(data=as.data.frame(matrix(nrow=nrow(gene.env$exprs),ncol=0)),
+                                    varMetadata=data.frame(labelDescription=c()))
+  rownames(gene.fdata) <- rownames(gene.env$exprs)
+  
+  
+  metadata <- '/mnt/work1/users/bhklab/Projects/cell_line_clonality/total_cel_list/datasets/seg_files/ref/genentech.snparray.manifest.csv'
   #### Assemble PhenoData ####
   meta <- read.table(metadata, sep=",", header=TRUE,
                      stringsAsFactors = FALSE, check.names = FALSE)
@@ -373,11 +387,10 @@ reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
     if(any(duplicated(m[,features]))) m <- m[-which(duplicated(m[,features])),]
     if(any(is.na(m[,features]))) m <- m[-which(is.na(m[,features])),]
     rownames(m) <- m[,features]
-    m <- m[,-c(1:length(keys))]
+    m <- m[,-c(1:length(keys)),drop=FALSE]
     colnames(m) <- names(gene.lrr) 
     as.matrix(m)
   }, features=features)
-  if(length(mt) == 5) mt[[6]] <- mt[[5]] + mt[[4]]
   mt
 }
 
