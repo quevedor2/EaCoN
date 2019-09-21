@@ -147,6 +147,26 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
   list("seg"=cnv, "genes"=seg.anno)  
 }
 
+#' Annotate CNV
+#' @description This function annotates the output of the ASCN ASCAT file. It scans
+#' the output directory for the *.gammaEval.txt to select the best "Goodness of Fit"
+#' score, then load in the corresponding RDS file.  Using this RDS file, it extracts
+#' and calculates the absolute allele-specific copy-number (modalA, modalB, modalAB),
+#' as well as the L2R copy-ratios associated with them (nAraw, nBraw, seg.mean). It 
+#' then annotates each segment and attributes a value to each gene in the knownGenes 
+#' data structure
+#'
+#' @param fit.val A dataframe of the *.gammaEval.txt file
+#' @param sample Sample name 
+#' @param segmenter Segmenter used (only works with ASCAT)
+#' @param build Genome build (only works with hg19) [Default=hg19]
+#' @param bin.size Bin-size for feature creation [Default=50000]
+#' @param ... 
+#'
+#' @return
+#' @export
+#'
+#' @examples
 annotateRDS <- function(fit.val, sample, segmenter, build='hg19', 
                         bin.size=50000, ...){
   ## Assemble the ASCAT Seg file into a CNV GRanges object
@@ -177,8 +197,106 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   return(cl.anno)
 }
 
+#' Batch wrapper for annotateRDS()
+#'
+#' @param all.fits Sample named-list of all samples containing two elements:
+#'  fit[data.frame]: data.frame of the *.gammaEval.txt file
+#'  sample[character]: sample name
+#' @param segmenter Segmenter used (E.g. ASCAT) (Only ASCAT works currently)
+#' @param nthread Max number of threads to use [Default=1]
+#' @param cluster.type Cluster type [Default=PSOCK]
+#' @param ... 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+#'     gr.cnv <- annotateRDS.Batch(all.fits, toupper(segmenter), nthread=3)
+annotateRDS.Batch <- function(all.fits, segmenter, nthread = 1, 
+                              cluster.type = "PSOCK", ...){
+  if (length(all.fits) < nthread) nthread <- length(all.fits)
+  `%dopar%` <- foreach::"%dopar%"
+  cl <- parallel::makeCluster(spec = nthread, type = cluster.type, outfile = "")
+  doParallel::registerDoParallel(cl)
+  grcnv.batch <- foreach::foreach(r = all.fits, 
+                                  .inorder = TRUE, 
+                                  .errorhandling = "stop",
+                                  .export = ls(globalenv())) %dopar% {
+                                    annotateRDS(r$fit, r$sample, segmenter, build='hg19', bin.size=50000)
+                                  }
+  parallel::stopCluster(cl)
+  names(grcnv.batch) <- sapply(all.fits, function(x) x$sample)
+  return(grcnv.batch)
+}
+
 ############################################
 #### Building cBioportal Output Objects ####
+.appendToCbioSeg <- function(cbio.path, cbio.file, seg, overwrite=NULL){
+  exist.seg <- read.table(file.path(cbio.path, cbio.file['file']), sep="\t", header=T,
+                          stringsAsFactors = F, check.names = F, fill=F)
+  exist.spl <- split(exist.seg, f=exist.seg$ID)
+  if(!is.null(overwrite)) {
+    ov.idx <- sapply(overwrite, function(id) grep(id, names(exist.spl)))
+    tmsg(paste0("Overwriting samples: ", paste(names(exist.spl)[ov.idx], collapse=",")))
+    exist.spl[ov.idx] <- NULL
+  }
+  
+  new.spl <- split(seg, f=seg$ID)
+  new.ids <- which(!names(new.spl) %in% names(exist.spl))
+  
+  if(length(new.ids) > 0){
+    tmsg(paste0("New samples being added to cBio Seg file : ", 
+                paste(names(new.spl)[new.ids], collapse=",")))
+    seg <- do.call(rbind, append(new.spl[new.ids], exist.spl))
+  } else {
+    tmsg("No new samples to add.  If you want to replace an existing sample, please specify 
+         using overwrite=c('SampleA', 'SampleB')")
+  }
+  return(seg)
+}
+
+.appendToCbioMat <- function(cbio.path, cbio.file, cnv.mat, overwrite=NULL){
+  exist.cna <- read.table(file.path(cbio.path, cbio.file['file']), sep="\t", header=T,
+                          stringsAsFactors = F, check.names = F, fill=F)
+  if(!is.null(overwrite)) {
+    ov.idx <- sapply(overwrite, function(id) grep(id, colnames(exist.cna)))
+    tmsg(paste0("Overwriting samples: ", paste(colnames(exist.cna)[ov.idx], collapse=",")))
+    exist.cna <- exist.cna[,-ov.idx]
+  }
+  new.cols <- which(!colnames(cnv.mat) %in% colnames(exist.cna))
+  
+  if(length(new.cols) > 0){
+    tmsg(paste0("New samples being added to cBio CNA matrices: ", 
+                paste(colnames(cnv.mat)[new.cols], collapse=",")))
+    cnv.mat <- suppressWarnings(merge(exist.cna, cnv.mat[,c(1,2, new.cols)], 
+                                      by=c('Hugo_Symbol', 'Entrez_Gene_Id'), all.x=TRUE))
+  } else {
+    tmsg("No new samples to add.  If you want to replace an existing sample, please specify 
+         using overwrite=c('SampleA', 'SampleB')")
+  }
+  return(cnv.mat)
+}
+
+#' cBio-formatted table builder 
+#' @description Generates cBioportal-style formatted tsv's and seg files as per
+#' details from https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats
+#' 
+#' @param gr.cnv List output from annotateRDS.Batch() function
+#' @param cbio.path Relative path to the cBio output path
+#' @param pattern Regex pattern for existing linear_CNA and _CNA files [Default="_CNA"]
+#' @param cbio.cna.file Names of existing data_CNA.txt files [Defaul=NULL]
+#' @param cbio.linear.file Names of existing data_linear_CNA.txt files [Defaul=NULL]
+#' @param cbio.seg.file Names of existing data_cna_hg19.seg files [Defaul=NULL]
+#' @param amp.thresh Absolute CN to start calling AMP from GAINs [Default=5]
+#' @param add.on.to.existing Builds on existing cBio data found [Default=TRUE]
+#' @param overwrite Sample ID to overwrite in cBio output if already existing [Default=NULL]
+#' @param ... 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+#'     buildCbioOut(gr.cnv, cbio.path="./out/cBio", overwrite=c('YT_4941', '5637_3858'))
 buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA", 
                          cbio.cna.file=NULL, cbio.linear.file=NULL, cbio.seg.file=NULL,
                          amp.thresh=5, add.on.to.existing=TRUE, ...){
@@ -234,15 +352,16 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
   if(is.null(cbio.seg.file)){
     cbio.seg.file <- .checkFile(cbio.path, 'data_cna_hg19.seg',   pat='seg$')
   }
-
+  
   ## Create the data_CNA.txt file: https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats#discrete-copy-number-data
-  cna.mat <- Reduce(function(x,y) merge(x,y, by=c('SYMBOL', 'ENTREZ'), all.x=TRUE, all.y=TRUE),
-                    lapply(gr.cnv, function(cnv){ cnv$genes$genes[,c('SYMBOL', 'ENTREZ', 'TCN')]}))
+  cna.mat <- suppressWarnings(Reduce(function(x,y) merge(x,y, by=c('SYMBOL', 'ENTREZ'), 
+                                                         all.x=TRUE, all.y=TRUE),
+                                     lapply(gr.cnv, function(cnv){ cnv$genes$genes[,c('SYMBOL', 'ENTREZ', 'TCN')]})))
   cna.mat <- .adjustCnaMat(cna.mat, mat.type = 'CNA', amp.thresh = amp.thresh, ord = NULL)
-
+  
   ## Create the data_linear_CNA.txt file: https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats#continuous-copy-number-data
-  linear.mat <- Reduce(function(x,y) merge(x,y, by=c('SYMBOL', 'ENTREZ'), all.x=TRUE),
-                       lapply(gr.cnv, function(cnv){ cnv$genes$genes[,c('SYMBOL', 'ENTREZ', 'seg.mean')]}))
+  linear.mat <- suppressWarnings(Reduce(function(x,y) merge(x,y, by=c('SYMBOL', 'ENTREZ'), all.x=TRUE),
+                                        lapply(gr.cnv, function(cnv){ cnv$genes$genes[,c('SYMBOL', 'ENTREZ', 'seg.mean')]})))
   linear.mat <- .adjustCnaMat(linear.mat, mat.type = 'linear', ord = cna.mat$Hugo_Symbol)
   
   ## Create the data_cna_hg19.seg data file: https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats#segmented-data
@@ -271,52 +390,6 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
   .write(x=segs, file=file.path(cbio.path, cbio.seg.file['file']))
   .write(x=cna.mat, file=file.path(cbio.path, cbio.cna.file['file']))
   .write(x=linear.mat, file=file.path(cbio.path, cbio.linear.file['file']))
-}
-
-.appendToCbioSeg <- function(cbio.path, cbio.file, seg, overwrite=NULL){
-  exist.seg <- read.table(file.path(cbio.path, cbio.file['file']), sep="\t", header=T,
-                          stringsAsFactors = F, check.names = F, fill=F)
-  exist.spl <- split(exist.seg, f=exist.seg$ID)
-  if(!is.null(overwrite)) {
-    ov.idx <- sapply(overwrite, function(id) grep(id, names(exist.spl)))
-    tmsg(paste0("Overwriting samples: ", paste(names(exist.spl)[ov.idx], collapse=",")))
-    exist.spl[ov.idx] <- NULL
-  }
-  
-  new.spl <- split(seg, f=seg$ID)
-  new.ids <- which(!names(new.spl) %in% names(exist.spl))
-  
-  if(length(new.ids) > 0){
-    tmsg(paste0("New samples being added to cBio Seg file : ", 
-                paste(names(new.spl)[new.ids], collapse=",")))
-    seg <- do.call(rbind, append(new.spl[new.ids], exist.spl))
-  } else {
-    tmsg("No new samples to add.  If you want to replace an existing sample, please specify 
-         using overwrite=c('SampleA', 'SampleB')")
-  }
-  return(seg)
-}
-
-.appendToCbioMat <- function(cbio.path, cbio.file, cnv.mat, overwrite=NULL){
-  exist.cna <- read.table(file.path(cbio.path, cbio.file['file']), sep="\t", header=T,
-                          stringsAsFactors = F, check.names = F, fill=F)
-  if(!is.null(overwrite)) {
-    ov.idx <- sapply(overwrite, function(id) grep(id, colnames(exist.cna)))
-    tmsg(paste0("Overwriting samples: ", paste(colnames(exist.cna)[ov.idx], collapse=",")))
-    exist.cna <- exist.cna[,-ov.idx]
-  }
-  new.cols <- which(!colnames(cnv.mat) %in% colnames(exist.cna))
-  
-  if(length(new.cols) > 0){
-    tmsg(paste0("New samples being added to cBio CNA matrices: ", 
-                paste(colnames(cnv.mat)[new.cols], collapse=",")))
-    cnv.mat <- merge(exist.cna, cnv.mat[,c(1,2, new.cols)], 
-                     by=c('Hugo_Symbol', 'Entrez_Gene_Id'), all.x=TRUE)
-  } else {
-    tmsg("No new samples to add.  If you want to replace an existing sample, please specify 
-         using overwrite=c('SampleA', 'SampleB')")
-  }
-  return(cnv.mat)
 }
 
 #########################################
@@ -363,6 +436,51 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
   return(m.meta)
 }
 
+.createEsetEnv <- function(mats, exprs.id='seg.mean'){
+  eset.env <- new.env()
+  exprs.idx <- grep(exprs.id, names(mats))
+  nonexprs.idx <- c(1:length(mats))[-exprs.idx]
+  
+  assign("exprs", mats[[exprs.idx]], envir=eset.env)
+  for(idx in nonexprs.idx){
+    assign(names(mats)[idx], mats[[idx]], envir=eset.env)
+  }
+  
+  return(eset.env)
+}
+
+reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
+                           keys=c("ENTREZ", "SYMBOL", "ENSEMBL")){
+  mt <- lapply(cols, function(each.col, features){
+    m <- suppressWarnings(Reduce(f=function(x,y) merge(x,y,by=keys),
+                                 lapply(gene.lrr, function(i) i[['genes']][,c(keys, each.col)])))
+    if(ord) m <- m[match(gene.lrr[[1]][['genes']][,keys], m[,keys]),]
+    if(any(duplicated(m[,features]))) m <- m[-which(duplicated(m[,features])),]
+    if(any(is.na(m[,features]))) m <- m[-which(is.na(m[,features])),]
+    rownames(m) <- m[,features]
+    m <- m[,-c(1:length(keys)),drop=FALSE]
+    colnames(m) <- names(gene.lrr) 
+    as.matrix(m)
+  }, features=features)
+  mt
+}
+
+#' PSet builder for PharmacoGX
+#' @description Builds the PSet that is used in PharmacoGX.  It is defined to interface
+#' with the output from annotateRDS.Batch() function
+#'
+#' @param gr.cnv List output from annotateRDS.Batch() function
+#' @param anno.name The ID of the group you are analyzing (e.g. 'GDSC')
+#' @param pset.path Relative path to the PSet output path
+#' @param cols The columns from gr.cnv to build into assayData() objects
+#' @param meta A dataframe where one column contains the sample IDs found in gr.cnv
+#' @param ... 
+#'
+#' @return
+#' @export
+#'
+#' @examples 
+#'     buildPSetOut(gr.cnv, "CGP", pset.path, meta=cell.line.anno)
 buildPSetOut <- function(gr.cnv, anno.name, pset.path, 
                          cols=c('seg.mean', 'nAraw', 'nBraw', 'nMinor', 'nMajor', 'TCN'), ...){
   dir.create(pset.path, recursive = T, showWarnings = F)
@@ -407,51 +525,31 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
   save(bin.eset, file=file.path(pset.path, paste0(anno.name, "_bin_ESet.RData")))
 }
 
-.createEsetEnv <- function(mats, exprs.id='seg.mean'){
-  eset.env <- new.env()
-  exprs.idx <- grep(exprs.id, names(mats))
-  nonexprs.idx <- c(1:length(mats))[-exprs.idx]
+
+
+
+
+
+
+
+
+.junk <- function(){
+  stop("This function should never be called")
+  ### Temp
+  fp <- file.path(sample, "ASCAT", "ASCN", paste0(sample, ".gammaEval.txt"))
+  fit.val <- read.table(fp, sep="\t", header=TRUE, stringsAsFactors = F,
+                        check.names = F, fill=T)
+  ###
   
-  assign("exprs", mats[[exprs.idx]], envir=eset.env)
-  for(idx in nonexprs.idx){
-    assign(names(mats)[idx], mats[[idx]], envir=eset.env)
-  }
+  all.fits <- list()
+  all.fits[[sample]] <- list("fit"=fit.val,
+                             "sample"=sample)
   
-  return(eset.env)
+  gr.cnv <- lapply(all.fits, function(x) annotateRDS(x$fit, x$sample, segmenter, 
+                                                     build='hg19', bin.size=50000))
+  cbio.path=file.path("out", "cBio")
+  buildCbioOut(gr.cnv, cbio.path="./out/cBio", overwrite=sample)
+  
+  pset.path=file.path("out", "PSet")
+  buildPSetOut(gr.cnv, "CGP", pset.path, meta=cell.line.anno)
 }
-
-reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
-                           keys=c("ENTREZ", "SYMBOL", "ENSEMBL")){
-  mt <- lapply(cols, function(each.col, features){
-    m <- suppressWarnings(Reduce(f=function(x,y) merge(x,y,by=keys),
-                                 lapply(gene.lrr, function(i) i[['genes']][,c(keys, each.col)])))
-    if(ord) m <- m[match(gene.lrr[[1]][['genes']][,keys], m[,keys]),]
-    if(any(duplicated(m[,features]))) m <- m[-which(duplicated(m[,features])),]
-    if(any(is.na(m[,features]))) m <- m[-which(is.na(m[,features])),]
-    rownames(m) <- m[,features]
-    m <- m[,-c(1:length(keys)),drop=FALSE]
-    colnames(m) <- names(gene.lrr) 
-    as.matrix(m)
-  }, features=features)
-  mt
-}
-
-
-
-
-### Temp
-fp <- file.path(sample, "ASCAT", "ASCN", paste0(sample, ".gammaEval.txt"))
-fit.val <- read.table(fp, sep="\t", header=TRUE, stringsAsFactors = F,
-                      check.names = F, fill=T)
-###
-
-all.fits <- list()
-all.fits[[sample]] <- list("fit"=fit.val,
-                           "sample"=sample)
-gr.cnv <- lapply(all.fits, function(x) annotateRDS(x$fit, x$sample, segmenter, 
-                                                   build='hg19', bin.size=50000))
-cbio.path=file.path("out", "cBio")
-buildCbioOut(gr.cnv, cbio.path="./out/cBio", overwrite=sample)
-
-pset.path=file.path("out", "PSet")
-buildPSetOut(gr.cnv, "CGP", pset.path, meta=cell.line.anno)
