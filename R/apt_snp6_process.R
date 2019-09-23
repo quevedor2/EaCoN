@@ -360,8 +360,8 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL,
   
   
   ## Building ASCAT-like object
-  my.ascat.obj <- Build.ASCAT(ao.df, meta.b, affy.meta,
-                              CEL, sex.chr, samplename, cs)
+  my.ascat.obj <- Build.SNP6(ao.df, meta.b, affy.meta,
+                             CEL, sex.chr, samplename, cs)
   
   rds.path <- file.path(out.dir, samplename, paste(samplename, arraytype, genome, "processed.RDS", sep="_"))
   if(write.data) saveRDS(my.ascat.obj, rds.path, compress = "bzip2")
