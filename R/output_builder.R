@@ -163,10 +163,12 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
 #' @param bin.size Bin-size for feature creation [Default=50000]
 #' @param ... 
 #'
-#' @return
+#' @return Returns a list containing 3 elements: 'seg', 'genes', and 'bins'
+#' for annotated datastructure fo a seg file, genes per row, and bins per row
 #' @export
 #'
 #' @examples
+#'  annotateRDS(fit.val.df, 'SampleX', 'ASCAT', build='hg19', bin.size=50000)
 annotateRDS <- function(fit.val, sample, segmenter, build='hg19', 
                         bin.size=50000, ...){
   ## Assemble the ASCAT Seg file into a CNV GRanges object
@@ -207,7 +209,7 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
 #' @param cluster.type Cluster type [Default=PSOCK]
 #' @param ... 
 #'
-#' @return
+#' @return Returns annotateRDS() objects
 #' @export
 #'
 #' @examples
@@ -295,7 +297,7 @@ annotateRDS.Batch <- function(all.fits, segmenter, nthread = 1,
 #' @param overwrite Sample ID to overwrite in cBio output if already existing [Default=NULL]
 #' @param ... 
 #'
-#' @return
+#' @return NULL
 #' @export
 #'
 #' @examples
@@ -481,7 +483,7 @@ reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
 #' @param meta A dataframe where one column contains the sample IDs found in gr.cnv
 #' @param ... 
 #'
-#' @return
+#' @return NULL
 #' @export
 #'
 #' @examples 

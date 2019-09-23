@@ -1,5 +1,13 @@
 ## Performs CS CEL processing
-SNP6.Process <- function(CEL = NULL, samplename = NULL, l2r.level = "normal", gc.renorm = TRUE, gc.rda = NULL, wave.renorm = TRUE, wave.rda = NULL, mingap = 1E+06, out.dir = getwd(), oschp.keep = FALSE, force.OS = NULL, apt.version = "1.20.0", apt.build = "na35.r1", genome.pkg = "BSgenome.Hsapiens.UCSC.hg19", return.data = FALSE, write.data = TRUE, plot = TRUE, force = FALSE) {
+SNP6.Process <- function(CEL = NULL, samplename = NULL, 
+                         l2r.level = "normal", method="rawcopy",
+                         gc.renorm = TRUE, gc.rda = NULL, wave.renorm = TRUE, 
+                         wave.rda = NULL, mingap = 1E+06, 
+                         out.dir = getwd(), oschp.keep = FALSE, 
+                         force.OS = NULL, apt.version = "1.20.0", 
+                         apt.build = "na35.r1", genome.pkg = "BSgenome.Hsapiens.UCSC.hg19", 
+                         return.data = FALSE, write.data = TRUE, 
+                         plot = TRUE, force = FALSE) {
 
   # setwd("/home/job/WORKSPACE/EaCoN_tests/SNP6")
   # CEL <- "GSM820994.CEL.bz2"
@@ -53,7 +61,7 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL, l2r.level = "normal", gc
   if (!arraytype.cel %in% sup.array) stop(tmsg(paste0("Identified array type '", arraytype.cel, "' is not supported by this function !")), call. = FALSE)
 
   ## Checking APT version compatibility
-  valid.apt.versions <- c("1.20.0")
+  valid.apt.versions <- c("1.20.0", "geno_summ.1.20.0")
   if (!(apt.version %in% valid.apt.versions)) warning(tmsg(paste0("APT version ", apt.version, " is not supported. Program may fail !")))
 
   ## Checking build compatibility
@@ -64,17 +72,25 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL, l2r.level = "normal", gc
   apt.snp6.pkg.name <- paste0("apt.snp6.", apt.version)
   if (!(apt.snp6.pkg.name %in% installed.packages())) stop(tmsg(paste0("Package ", apt.snp6.pkg.name, " not found !")), call. = FALSE)
   suppressPackageStartupMessages(require(package = apt.snp6.pkg.name, character.only = TRUE))
-
-  ## Processing CEL to an OSCHP file
-  oscf <- apt.snp6.process(CEL = CEL, samplename = samplename, out.dir = out.dir, temp.files.keep = FALSE, force.OS = force.OS, apt.build = apt.build)
-
-  ## Reading OSCHP
-  # tmsg("Loading OSCHP file ...")
-  my.oschp <- oschp.load(file = oscf)
-  sex.chr <- c("chrX", "chrY")
   
-  ## Processing : meta (and checks)
-  if (!("affymetrix-chipsummary-snp-qc" %in% names(my.oschp$Meta$analysis))) my.oschp$Meta$analysis[["affymetrix-chipsummary-snp-qc"]] <- NA
+  ## Processing CEL to an OSCHP file
+  if(method=='rawcopy'){
+    oscf <- apt.snp6.process(CEL = CEL, samplename = samplename, out.dir = out.dir, temp.files.keep = FALSE, force.OS = force.OS, apt.build = apt.build)
+    
+    ## Reading OSCHP
+    # tmsg("Loading OSCHP file ...")
+    my.oschp <- oschp.load(file = oscf)
+    sex.chr <- c("chrX", "chrY")
+    
+    ## Processing : meta (and checks)
+    if (!("affymetrix-chipsummary-snp-qc" %in% names(my.oschp$Meta$analysis))) my.oschp$Meta$analysis[["affymetrix-chipsummary-snp-qc"]] <- NA
+  } else if(method=='hapseg'){
+    ## Checking apt-copynumber-cyto-ssa package loc
+    apt.snp6.pkg.name <- paste0("apt.snp6.", apt.version)
+    if (!(apt.snp6.pkg.name %in% installed.packages())) stop(tmsg(paste0("Package ", apt.snp6.pkg.name, " not found !")), call. = FALSE)
+    suppressPackageStartupMessages(require(package = apt.snp6.pkg.name, character.only = TRUE))
+    
+  }
   
   ### Loading genome info
   tmsg(paste0("Loading ", genome.pkg, " ..."))
@@ -344,56 +360,11 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL, l2r.level = "normal", gc
   
   
   ## Building ASCAT-like object
+  my.ascat.obj <- Build.SNP6(ao.df, meta.b, affy.meta,
+                             CEL, sex.chr, samplename, cs)
   
-  tmsg("Building normalized object ...")
-  # my.ch <- sapply(unique(ao.df$chr), function(x) { which(ao.df$chr == x) })
-  my.ascat.obj <- list(
-    data = list(
-      Tumor_LogR.ori = data.frame(sample = ao.df$L2R.ori, row.names = ao.df$ProbeSetName),
-      Tumor_LogR = data.frame(sample = ao.df$L2R, row.names = ao.df$ProbeSetName),
-      Tumor_BAF = data.frame(sample = ao.df$BAF, row.names = ao.df$ProbeSetName),
-      Tumor_AD = data.frame(sample = ao.df[["Allele Difference"]], row.names = ao.df$ProbeSetName),
-      Tumor_LogR_segmented = NULL,
-      Tumor_BAF_segmented = NULL,
-      Germline_LogR = NULL,
-      Germline_BAF = NULL,
-      SNPpos = data.frame(chrs = ao.df$chr, pos = ao.df$pos, row.names = ao.df$ProbeSetName),
-      ch = sapply(unique(ao.df$chr), function(x) { which(ao.df$chr == x) }),
-      chr = sapply(unique(ao.df$chrgap), function(x) { which(ao.df$chrgap == x) }),
-      chrs = unique(ao.df$chr),
-      samples = samplename,
-      gender = as.vector(meta.b$predicted.gender),
-      sexchromosomes = sex.chr,
-      failedarrays = NULL
-    ), 
-    germline = list(
-      germlinegenotypes = matrix(as.logical(abs(ao.df$cluster2 - 2L)), ncol = 1),
-      failedarrays = NULL
-    )
-  )
-  colnames(my.ascat.obj$germline$germlinegenotypes) <- colnames(my.ascat.obj$data$Tumor_LogR) <- colnames(my.ascat.obj$data$Tumor_LogR.ori) <- colnames(my.ascat.obj$data$Tumor_BAF) <- samplename
-  my.ascat.obj$data$Tumor_BAF.unscaled = data.frame(sample = ao.df$BAF.unscaled, row.names = ao.df$ProbeSetName)
-  colnames(my.ascat.obj$data$Tumor_BAF.unscaled) <- samplename
-  my.ascat.obj$data$Tumor_BAF.unisomy = data.frame(sample = ao.df$uni, row.names = ao.df$ProbeSetName)
-  colnames(my.ascat.obj$data$Tumor_BAF.unisomy) <- samplename
-  rownames(my.ascat.obj$germline$germlinegenotypes) <- ao.df$ProbeSetName
-  genopos <- ao.df$pos + cs$chromosomes$chr.length.toadd[ao.df$chrN]
-  rm(ao.df)
-  gc()
-  
-  ## Adding meta
-  my.ascat.obj$meta = list(
-    basic = meta.b,
-    affy = affy.meta
-  )
-  
-  ## Adding CEL intensities
-  my.ascat.obj$CEL = list(
-    CEL1 = affxparser::readCel(filename = CEL)
-  )
-  my.ascat.obj$CEL$CEL1$intensities <- as.integer(my.ascat.obj$CEL$CEL1$intensities)
-  
-  if(write.data) saveRDS(my.ascat.obj, paste0(out.dir, "/", samplename, "/", samplename, "_", arraytype, "_", genome, "_processed.RDS"), compress = "bzip2")
+  rds.path <- file.path(out.dir, samplename, paste(samplename, arraytype, genome, "processed.RDS", sep="_"))
+  if(write.data) saveRDS(my.ascat.obj, rds.path, compress = "bzip2")
   
   ## PLOT
   if (plot) {
