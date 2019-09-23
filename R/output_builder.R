@@ -231,7 +231,10 @@ annotateRDS.Batch <- function(all.fits, segmenter, nthread = 1,
 
 ############################################
 #### Building cBioportal Output Objects ####
-.appendToCbioSeg <- function(cbio.path, cbio.file, seg, overwrite=NULL){
+.appendToCbioSeg <- function(cbio.path, cbio.file, seg, raw=FALSE, overwrite=NULL){
+  if(raw){
+    cbio.file['file'] <- paste0("RAW", cbio.file['file'])
+  }
   exist.seg <- read.table(file.path(cbio.path, cbio.file['file']), sep="\t", header=T,
                           stringsAsFactors = F, check.names = F, fill=F)
   exist.spl <- split(exist.seg, f=exist.seg$ID)
@@ -367,6 +370,7 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
   ## Create the data_cna_hg19.seg data file: https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats#segmented-data
   segs <- do.call("rbind", lapply(gr.cnv, function(x) x$seg))
   segs$ID <- gsub(".[0-9]*$", "", rownames(segs))
+  raw.segs <- segs
   segs <- segs[,c('ID', 'seqnames', 'start', 'end', 'width', 'seg.mean')]
   colnames(segs) <- c('ID', 'chrom', 'loc.start', 'loc.end', 'num.mark', 'seg.mean')
   
@@ -379,6 +383,7 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
       linear.mat <- .appendToCbioMat(cbio.path, cbio.linear.file, linear.mat, ...)
     }
     if(as.logical(cbio.seg.file['exists'])){
+      raw.segs <- .appendToCbioSeg(cbio.path, cbio.seg.file, raw.segs, raw=TRUE, ...)
       segs <- .appendToCbioSeg(cbio.path, cbio.seg.file, segs, ...)
     }
   }
