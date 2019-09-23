@@ -20,6 +20,10 @@ annotateRDS(fit.val, sample, segmenter, build = "hg19",
 
 \item{...}{}
 }
+\value{
+Returns a list containing 3 elements: 'seg', 'genes', and 'bins'
+for annotated datastructure fo a seg file, genes per row, and bins per row
+}
 \description{
 This function annotates the output of the ASCN ASCAT file. It scans
 the output directory for the *.gammaEval.txt to select the best "Goodness of Fit"
@@ -28,4 +32,7 @@ and calculates the absolute allele-specific copy-number (modalA, modalB, modalAB
 as well as the L2R copy-ratios associated with them (nAraw, nBraw, seg.mean). It 
 then annotates each segment and attributes a value to each gene in the knownGenes 
 data structure
+}
+\examples{
+ annotateRDS(fit.val.df, 'SampleX', 'ASCAT', build='hg19', bin.size=50000)
 }

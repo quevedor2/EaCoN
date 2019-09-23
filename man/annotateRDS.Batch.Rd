@@ -20,6 +20,9 @@ sample[character]: sample name}
 
 \item{...}{}
 }
+\value{
+Returns annotateRDS() objects
+}
 \description{
 Batch wrapper for annotateRDS()
 }
