@@ -369,6 +369,8 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL,
   ## PLOT
   if (plot) {
     tmsg("Plotting ...")
+    genopos <- ao.df$pos + cs$chromosomes$chr.length.toadd[ao.df$chrN]
+    
     kend <- genopos[vapply(my.ascat.obj$data$ch, max, 1L)]
     l2r.notna <- which(!is.na(my.ascat.obj$data$Tumor_LogR[,1]))
     l2r.rm <- runmed(my.ascat.obj$data$Tumor_LogR[,1][l2r.notna], smo)
