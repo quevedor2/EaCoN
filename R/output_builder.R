@@ -160,7 +160,7 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
   ## Map ensembl and HUGO IDs to the ENTREZ ids
   seg.anno <- merge(seg.entrez, getMapping(),
                     by.x="ENTREZ", by.y="ENTREZID", all.x=TRUE)
-  seg.anno <- seg.anno[-which(duplicated(seg.anno$ENTREZ)),]
+  if(any(duplicated(seg.anno$ENTREZ))) seg.anno <- seg.anno[-which(duplicated(seg.anno$ENTREZ)),]
   for(each.col in cols){
     seg.anno[,each.col] <- as.numeric(as.character(seg.anno[,each.col]))
   }
