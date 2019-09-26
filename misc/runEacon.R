@@ -187,17 +187,3 @@ for(segmenter in c("ASCAT")){
     buildPSetOut(gr.cnv, "CGP", pset.path, meta=cell.line.anno)
   }
 }
-FIEFS_p_NCLE_DNA_Affy5_GenomeWideSNP_6_C06_411046
-
-
-x <- list("A"=1:10,
-          "B"=5:15,
-          "C"=10:20)
-boxplot(x)
-sapply(seq_along(x), function(x.pos){
-  require(scales)
-  spread <- 0.1
-  y.vals <- x[[x.pos]]
-  x.vals <- x.pos + runif(n=length(y.vals), min = -1*spread, max = spread)
-  points(x=x.vals, y=y.vals, pch=16, col=alpha("black", 0.7))
-})
