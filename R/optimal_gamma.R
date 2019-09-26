@@ -1,5 +1,7 @@
 #### setup ####
 library(EaCoN)
+library(dplyr)
+library(GenomicRanges)
 pdir <- "/mnt/work1/users/pughlab/projects/CCLE/eacon"
 setwd(pdir)
 sample <- 'ARLES_p_NCLE_DNAAffy2_S_GenomeWideSNP_6_A05_256010'
@@ -11,6 +13,13 @@ pancan.dir <- '/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/ra
 pancan.obj <- createPancanSegRef(pancan.dir, out.dir='/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/cleaned')
 
 #### Functions ####
+loadBestFitRDS <- function(gamma, ...){
+  RDS.file <- file.path(sample, toupper(segmenter), 'ASCN', paste0('gamma', format(gamma, nsmall=2)),
+                        paste(sample, 'ASCN', toupper(segmenter), 'RDS', sep="."))
+  rds <- readRDS(RDS.file)
+  return(rds)
+}
+
 createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T){
   setwd(ref.dir)
   seg.f <- list.files(pattern="whitelisted.seg$")
@@ -74,6 +83,19 @@ createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T){
   return(pancan.obj)
 }
 
+makeRefGRanges <- function(pancan.gr, gr1){
+  total.gr <- unlist(GRangesList(pancan.gr, granges(gr1)))
+  pancan.chr.grl <- split(total.gr, f=seqnames(total.gr))
+  comb.grl <- lapply(pancan.chr.grl, function(p.gr){
+    pos <- unique(sort(c(start(p.gr), end(p.gr))))
+    GRanges(seqnames=rep(unique(as.character(seqnames(p.gr))), length(pos)-1),
+            ranges = IRanges(start=pos[-length(pos)], 
+                             end=pos[-1]))
+  })
+  comb.gr <- unlist(as(comb.grl, 'GRangesList'))
+  return(comb.gr)
+}
+
 scoreSegsABC <- function(seg1.gr, seg2.gr){
   require(GenomicRanges)
   .expandRle <- function(rle.obj){
@@ -124,11 +146,22 @@ pancan.seg$Chromosome <- gsub("23$", "X", pancan.seg$Chromosome) %>%
 pancan.grl <- makeGRangesListFromDataFrame(pancan.seg, split.field='Sample', keep.extra.columns=T)
 seqlevelsStyle(pancan.grl) <- 'UCSC'
 
+## Make the combined reference GRanges obj
+pancan.gr <- sort(makeGRangesFromDataFrame(pancan.seg))
+seqlevelsStyle(pancan.gr) <- 'UCSC'
+
+
+
+
 ## Calculate ABC
 nthread <- 10
 pancan.abc <- mclapply(pancan.grl, function(seg2) scoreSegsABC(seg1.gr=seg1.gr, seg2.gr=seg2), mc.cores = nthread)
+pancan.abc <- as.matrix(unlist(pancan.abc))
 
-
+## Group ABC based on tumor type
+aps.spl <- split(pancan.obj[['APS-meta']], f=pancan.obj[['APS-meta']]$`cancer type`)
+abc.spl <- lapply(aps.spl, function(i) pancan.abc[i$sample,])
+boxplot(abc.spl[order(sapply(abc.spl, mean))], horizontal=T, las=1)
 
 
 ## Visualize periodicity
