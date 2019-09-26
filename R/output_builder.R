@@ -20,24 +20,35 @@ cleanGR <- function(gr0){
   gr0
 }
 
-getGenes <- function(genome.build="hg19"){
+getGenes <- function(genome.build="hg19", make.into.gr=FALSE){
   switch(genome.build,
-         hg18={ 
-           suppressPackageStartupMessages(require("TxDb.Hsapiens.UCSC.hg18.knownGene"))
-           package <- TxDb.Hsapiens.UCSC.hg18.knownGene 
+         hg18={
+           suppressPackageStartupMessages(require(TxDb.Hsapiens.UCSC.hg18.knownGene))
+           if(!exists("TxDb.Hsapiens.UCSC.hg18.knownGene")) stop("Requires TxDb.Hsapiens.UCSC.hg18.knownGene")
+           package <- TxDb.Hsapiens.UCSC.hg18.knownGene
          },
-         hg19={ 
-           suppressPackageStartupMessages(require("TxDb.Hsapiens.UCSC.hg19.knownGene"))
-           package <- TxDb.Hsapiens.UCSC.hg19.knownGene 
+         hg19={
+           suppressPackageStartupMessages(require(TxDb.Hsapiens.UCSC.hg19.knownGene))
+           if(!exists("TxDb.Hsapiens.UCSC.hg19.knownGene")) stop("Requires TxDb.Hsapiens.UCSC.hg19.knownGene")
+           package <- TxDb.Hsapiens.UCSC.hg19.knownGene
          },
-         hg38={ 
-           suppressPackageStartupMessages(require("TxDb.Hsapiens.UCSC.hg38.knownGene"))
-           package <- TxDb.Hsapiens.UCSC.hg38.knownGene 
+         hg38={
+           suppressPackageStartupMessages(require(TxDb.Hsapiens.UCSC.hg38.knownGene))
+           if(!exists("TxDb.Hsapiens.UCSC.hg38.knownGene")) stop("Requires TxDb.Hsapiens.UCSC.hg38.knownGene")
+           package <- TxDb.Hsapiens.UCSC.hg38.knownGene
          },
-         stop("genome must be hg18, hg19, or hg38"))
+         stop("genome must be 'hg19' or 'hg38'"))
   
-  list(txdb=package,
-       txdb.genes=genes(package))
+  if(make.into.gr){
+    genes0 <- genes(package)
+    idx <- rep(seq_along(genes0), elementNROWS(genes0$gene_id))
+    genes <- granges(genes0)[idx]
+    genes$gene_id = unlist(genes0$gene_id)
+    genes
+  } else {
+    list(txdb=package,
+         txdb.genes=genes(package))
+  }
 }
 
 getMapping <- function(in.col='ENTREZID', 
