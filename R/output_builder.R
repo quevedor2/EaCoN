@@ -43,10 +43,20 @@ getGenes <- function(genome.build="hg19"){
 getMapping <- function(in.col='ENTREZID', 
                        out.cols=c("SYMBOL", "ENSEMBL")){
   suppressPackageStartupMessages(require(org.Hs.eg.db))
-  gene.map <- select(org.Hs.eg.db, keys=keys(org.Hs.eg.db, in.col), 
-                     keytype="ENTREZID", columns=out.cols)
+  gene.map <- as.data.frame(sapply(out.cols, function(oc){
+    mapIds(org.Hs.eg.db, keys=keys(org.Hs.eg.db, in.col),
+           keytype="ENTREZID", column=oc, multiVals = 'first')
+  }))
+  gene.map$ENTREZID <- keys(org.Hs.eg.db, in.col)
+  # gene.map <- select(org.Hs.eg.db, keys=keys(org.Hs.eg.db, in.col), 
+  #                    keytype="ENTREZID", columns=out.cols)
+  
+  gene.map[,1] <- as.character(gene.map[,1])
+  gene.map[,2] <- as.character(gene.map[,2])
+  gene.map[,3] <- as.character(gene.map[,3])
   gene.map
 }
+
 
 ASCAT.selectBestFit <- function(fit.val, method='GoF'){
   idx <- switch(method,
