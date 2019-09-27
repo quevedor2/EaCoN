@@ -10,7 +10,8 @@ gamma <- 0.7
 #my.data <- EaCoN:::loadBestFitRDS(gamma=gamma,sample=sample, segmenter=segmenter)
 my.data <- loadBestFitRDS(gamma=gamma,sample=sample, segmenter=segmenter)
 pancan.dir <- '/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/raw'
-pancan.obj <- createPancanSegRef(pancan.dir, out.dir='/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/cleaned')
+pancan.obj <- createPancanSegRef(pancan.dir, out.dir='/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/cleaned',
+                                 write.seg=T)
 
 #### Functions ####
 loadBestFitRDS <- function(gamma, ...){
@@ -20,7 +21,7 @@ loadBestFitRDS <- function(gamma, ...){
   return(rds)
 }
 
-createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T){
+createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T, write.seg=FALSE){
   setwd(ref.dir)
   seg.f <- list.files(pattern="whitelisted.seg$")
   anno.f <- list.files(pattern="annotations.tsv$")
@@ -73,6 +74,8 @@ createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T){
   pancan.obj <- list('AP-meta'=anno.ploidy,
                      'APS-meta'=anno.ploidy.seg,
                      'seg'=seg)
+  
+  ## Output stuff
   if(!is.null(out.dir)){
     if(!dir.exists(out.dir)){
       dir.create(path = out.dir, recursive = T)
@@ -80,6 +83,19 @@ createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T){
     }
     saveRDS(pancan.obj, file = file.path(out.dir, "pancanPloidy.RDS"))
   }
+  
+  ## Writes cancer-specific seg files
+  if(write.seg & !is.null(out.dir)){
+    aps.cancer.type <- split(anno.ploidy.seg, f=anno.ploidy.seg$`cancer type`)
+    
+    sapply(names(aps.cancer.type), function(cancer.type){
+      cancer.seg <- seg[aps.cancer.type[[cancer.type]]$sample]
+      cancer.seg <- do.call(rbind, cancer.seg)
+      write.table(cancer.seg, file=file.path(out.dir, paste0(cancer.type, "_pancan.seg")),
+                  col.names=T, row.names=F, quote = F, sep = '\t')
+    })
+  }
+  
   return(pancan.obj)
 }
 
@@ -125,6 +141,28 @@ scoreSegsABC <- function(seg1.gr, seg2.gr){
   abc
 }
 
+combineGr <- function(gr){
+  gr.chr <- split(gr, seqnames(gr))
+  gr.c <- as(lapply(gr.chr, function(gr0){
+    pos <- unique(sort(c(start(gr0), end(gr0))))
+    GRanges(seqnames = rep(unique(as.character(seqnames(gr0))), length(pos)-1),
+            IRanges(start=pos[-length(pos)],
+                    end=pos[-1]))
+  }), 'GRangesList')
+  gr.c <- unlist(gr.c)
+  gr.c
+}
+
+populateGr <- function(grl, ref.gr, col.id){
+  for(each.id in names(grl)){
+    ov.idx <- findOverlaps(grl[[each.id]], ref.gr)
+    mcols(ref.gr)[,each.id] <- NA
+    mcols(ref.gr)[subjectHits(ov.idx),each.id] <- mcols(grl[[each.id]])[queryHits(ov.idx),col.id]
+  }
+  ref.gr
+}
+
+
 #### Load ####
 seg <- my.data$segments_raw
 seg$width <- round(with(seg, endpos - startpos)/100000,0) + 1
@@ -149,9 +187,14 @@ seqlevelsStyle(pancan.grl) <- 'UCSC'
 ## Make the combined reference GRanges obj
 pancan.gr <- sort(makeGRangesFromDataFrame(pancan.seg))
 seqlevelsStyle(pancan.gr) <- 'UCSC'
+ref.gr <- makeRefGRanges(pancan.gr, seg1.gr)
 
+## Create seg.mean matrix
 
-
+pancan.abc <- mclapply(pancan.grl, function(seg, col) {
+  ov.idx <- findOverlaps(seg, ref.gr)
+  mcols(ref.gr)[,id] <- mcols(seg[queryHits(ov.idx),])[,'Segment_Mean']
+})
 
 ## Calculate ABC
 nthread <- 10
