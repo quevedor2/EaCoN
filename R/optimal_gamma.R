@@ -3,6 +3,7 @@ library(EaCoN)
 library(dplyr)
 library(GenomicRanges)
 pdir <- "/mnt/work1/users/pughlab/projects/CCLE/eacon"
+gistic.dir <- '/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/gistic/output'
 setwd(pdir)
 sample <- 'ARLES_p_NCLE_DNAAffy2_S_GenomeWideSNP_6_A05_256010'
 segmenter <- 'ASCAT'
@@ -162,6 +163,28 @@ populateGr <- function(grl, ref.gr, col.id){
   ref.gr
 }
 
+reduceGr <- function(grl, sig=1){
+  grl <- lapply(grl, function(gr){
+    mcols(gr) <- apply(mcols(gr), 2, round, digits = sig)
+    gr
+  })
+  gr <- grl[['A']]
+  mcols(gr) <- cbind(mcols(grl[['A']]), mcols(grl[['F']]))
+  colnames(mcols(gr)) <- as.character(sapply(names(grl), paste0, "_", colnames(mcols(grl[[1]]))))
+  
+  runs <- apply(mcols(gr),1,paste, collapse="_")
+  rle.runs <- rle(runs)
+  
+  idx <- cumsum(rle.runs$lengths)
+  merge.idx <- data.frame("start"=idx[-length(idx)]+1,
+                          "end"=idx[-1])
+  m.gr <- unlist(reduce(as(apply(merge.idx, 1, function(x){
+    gr[x[1]:x[2],]
+  }), "GRangesList")))
+  mcols(m.gr) <- mcols(gr)[merge.idx$start,]
+  m.gr
+}
+
 
 #### Load ####
 seg <- my.data$segments_raw
@@ -171,6 +194,29 @@ seg$seg.mean <- round(log2(seg$nABraw / 2),3)
 seg$seg.mean <- seg$seg.mean - median(rep(seg$seg.mean, seg$width))
 seg$seg.mean[seg$seg.mean < -2] <- -2
 
+#### Load in GISTIC Cancer Type ####
+gistic.path <- file.path(gistic.dir, "KIRC", "scores.gistic")
+gistic <- read.table(gistic.path, header=T, stringsAsFactors = F, check.names = F, sep="\t")
+gr <- makeGRangesFromDataFrame(gistic, keep.extra.columns = T)
+grl <- split(gr, gr$Type)
+gr.c.raw <- combineGr(gr)
+gr.c.amp <- populateGr(grl, gr.c.raw, 'average amplitude')
+gr.c.freq <- populateGr(grl, gr.c.raw, 'frequency')
+
+gr.c.amp
+gr.c.freq <- reduceGr(list(gr.c.amp, gr.c.freq), sig=2)
+
+grl <- list("A"=gr.c.amp, "F"=gr.c.freq)
+
+#### Exhaustively compare seg to GISTIC Cancer type ####
+
+
+
+
+
+
+
+#### OLD METHOD ####
 ## Make GRanges objects:
 #seg1
 seg1.gr <- makeGRangesFromDataFrame(seg, keep.extra.columns = T,
