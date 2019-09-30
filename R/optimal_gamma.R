@@ -237,40 +237,45 @@ sampleGisticProfiles <- function(gr, bootstrap=1000, seed=1234){
        "F"=freq.s.mat)
 }
 
-calcABC <- function(gr, bootstrap=1000, seed=1234){
+fillMissingGistic <- function(gr, col.check='A_Amp'){
+  na.rows <- which(is.na(mcols(gr)[,col.check]))
+  na.cols <- grep("[FA]_", colnames(mcols(gr)), invert = F)
+  mcols(gr)[na.rows,na.cols] <- 0
+  mcols(gr)[na.rows, 'F_Neut'] <- 1
+  
+  ## Remove any NA rows for the given seg
+  seg.col <- grep("[FA]_", colnames(mcols(gr)), invert = T)
+  if(any(is.na(mcols(gr)[,seg.col]))){
+    gr <- gr[-which(is.na(mcols(gr)[,seg.col]))]
+  }
+  gr
+}
+
+calcABC <- function(gr, bootstrap.gr){
+  seg.col <- grep("[FA]_", colnames(mcols(gr)), invert = T)
+  abc <- sweep(bootstrap.gr[['A']], 1, as.matrix(mcols(gr)[,seg.col]), "-")
+  abc <- sweep(abc, 1, width(gr), "*")
+  freq <- colSums(log2(bootstrap.gr[['F']]+0.01), na.rm=T)
+  
+  ## Calculate the best fit model
   amplitude.idx <- grep("A_", colnames(mcols(gr)))
   frequency.idx <- grep("F_", colnames(mcols(gr)))
   seg.mean.idx <- grep("seg.mean", colnames(mcols(gr)))
   
   freq.mat <- as.matrix(mcols(gr[,c(frequency.idx)]))
-  abc.mat <- sweep(as.matrix(mcols(gr[,c(amplitude.idx)])), 1,
-                   as.matrix(mcols(gr[,seg.mean.idx])))
-  abc.mat <- floor(abs(abc.mat) * width(gr))
+  amp.mat <- as.matrix(mcols(gr[,c(amplitude.idx)]))
+  seg.mat <- as.matrix(mcols(gr[,c(seg.mean.idx)]))
   
-  
-  set.seed(seed)
-  abc <- lapply(c(1:bootstrap), function(x){
-    s <- apply(freq.mat, 1, function(p) sample(x=c(1:ncol(freq.mat)), 
-                                               size = 1, prob = p))
-    abc.s <- abc.mat[cbind(seq_along(s), s)]
-    freq.s <- freq.mat[cbind(seq_along(s), s)]
-
-    data.frame(abc.s, freq.s)
-  })
-  
-  abcs <- t(sapply(abc, function(x, min.val){
-    c("A"=sum(x[,1], na.rm=T),
-      "F"=sum(log2(x[,2]+min.val), na.rm=T))
-  }, min.val=0.01))
-  
-  min.idx <- apply(abc.mat, 1, which.min)
-  min.abc <- data.frame("A"=sum(abc.mat[cbind(seq_along(min.idx), min.idx)], na.rm=T), 
+  abc.seg.mat <- abs(sweep(amp.mat, 1, seg.mat, '-'))
+  abc.seg.mat <- sweep(abc.seg.mat, 1, width(gr), "*")
+  min.idx <- apply(abc.seg.mat, 1, which.min)
+  min.abc <- data.frame("A"=sum(abc.seg.mat[cbind(seq_along(min.idx), min.idx)], na.rm=T), 
                         "F"=sum(log2(freq.mat[cbind(seq_along(min.idx), min.idx)]+0.01), na.rm = T))
   
-  list("bootstrap"=abcs,
+  list("bootstrap"=data.frame("A"=colSums(abs(abc)),
+                              "F"=freq),
        "best.fit"=min.abc)
 }
-
 
 
 #### Load ####
@@ -315,73 +320,6 @@ if(!file.exists(file.path(gistic.dir, "gistic_scores.RData"))){
   load(file=file.path(gistic.dir, "gistic_scores.RData"))
 }
 
-fillMissingGistic <- function(gr, col.check='A_Amp'){
-  na.rows <- which(is.na(mcols(gr)[,col.check]))
-  na.cols <- grep("[FA]_", colnames(mcols(gr)), invert = F)
-  mcols(gr)[na.rows,na.cols] <- 0
-  mcols(gr)[na.rows, 'F_Neut'] <- 1
-  
-  ## Remove any NA rows for the given seg
-  seg.col <- grep("[FA]_", colnames(mcols(gr)), invert = T)
-  if(any(is.na(mcols(gr)[,seg.col]))){
-    gr <- gr[-which(is.na(mcols(gr)[,seg.col]))]
-  }
-  gr
-}
-
-mapSegToRef <- function(alt.seg, ref.seg){
-  col.name <- colnames(mcols(alt.seg))
-  
-  ov.idx <- as.data.frame(findOverlaps(alt.seg, ref.seg))
-  split.duplicates <- split(ov.idx, ov.idx$subjectHits)
-  
-  ## Get values and mapping for non-duplicated values
-  nondup.idx <- which(sapply(split.duplicates, nrow)==1)
-  alt.nondup.idx <- sapply(split.duplicates[nondup.idx], function(x) x$queryHits)
-  nondup.val <- mcols(alt.seg)[alt.nondup.idx,col.name]
-  
-  ## Get values and mapping for duplicated values
-  dup.idx <- which(sapply(split.duplicates, nrow)>1)
-  dup.val <- sapply(split.duplicates[dup.idx], function(ov, summary.metric='mean'){
-    switch(summary.metric,
-          mean=mean(mcols(alt.seg[ov$queryHits])[,1], na.rm=T),
-          median=median(mcols(alt.seg[ov$queryHits])[,1], na.rm=T))
-  })
-  
-  ## Initialize the seg.mean column
-  mcols(ref.seg)[,col.name] <- NA
-  ## Fill in non-duplicated values
-  mcols(ref.seg)[nondup.idx,col.name ] <- round(nondup.val,2)
-  ## Fill in duplicated values
-  mcols(ref.seg)[dup.idx,col.name ] <- round(dup.val, 2)
-  ref.seg
-}
-
-calcABC <- function(gr, bootstrap.gr){
-  seg.col <- grep("[FA]_", colnames(mcols(gr)), invert = T)
-  abc <- sweep(bootstrap.gr[['A']], 1, as.matrix(mcols(gr)[,seg.col]), "-")
-  abc <- sweep(abc, 1, width(gr), "*")
-  freq <- colSums(log2(bootstrap.gr[['F']]+0.01), na.rm=T)
-  
-  ## Calculate the best fit model
-  amplitude.idx <- grep("A_", colnames(mcols(gr)))
-  frequency.idx <- grep("F_", colnames(mcols(gr)))
-  seg.mean.idx <- grep("seg.mean", colnames(mcols(gr)))
-  
-  freq.mat <- as.matrix(mcols(gr[,c(frequency.idx)]))
-  amp.mat <- as.matrix(mcols(gr[,c(amplitude.idx)]))
-  seg.mat <- as.matrix(mcols(gr[,c(seg.mean.idx)]))
-
-  abc.seg.mat <- abs(sweep(amp.mat, 1, seg.mat, '-'))
-  abc.seg.mat <- sweep(abc.seg.mat, 1, width(gr), "*")
-  min.idx <- apply(abc.seg.mat, 1, which.min)
-  min.abc <- data.frame("A"=sum(abc.seg.mat[cbind(seq_along(min.idx), min.idx)], na.rm=T), 
-                        "F"=sum(log2(freq.mat[cbind(seq_along(min.idx), min.idx)]+0.01), na.rm = T))
-  
-  list("bootstrap"=data.frame("A"=colSums(abs(abc)),
-                              "F"=freq),
-       "best.fit"=min.abc)
-}
 
 all.abcs <- lapply(all.gistics, function(gr.c, seg.gr){
   print(1)
@@ -402,17 +340,7 @@ all.abcs <- lapply(all.gistics, function(gr.c, seg.gr){
   
   bootstrap.abc
 }, seg.gr=seg.gr)
-  
-  gr.c.raw <- combineGr(list(seg.gr, gr.c))
-  
-  gr.gistic.seg <- populateGr(list(gr.c, seg.gr), gr.c.raw)
-  gr.gistic.seg <- reduceGr(gr.gistic.seg, sig=1)
-  gr.gistic.seg$A_Del <- -1 * gr.gistic.seg$A_Del
-  gr.gistic.seg <- fillMissingGistic(gr.gistic.seg)
-  
-  abcs <- calcABC(gr.gistic.seg, ...)
-  abcs
-}, seg.gr=seg.gr, bootstrap=1000)
+
 
 mean.abc <- as.data.frame(t(sapply(all.abcs, function(x) colMeans(x[[1]]))))
 min.abc <- as.data.frame(t(sapply(all.abcs, function(x) unlist(x[[2]]))))
