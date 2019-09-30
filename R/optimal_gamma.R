@@ -143,47 +143,134 @@ scoreSegsABC <- function(seg1.gr, seg2.gr){
 }
 
 combineGr <- function(gr){
+  if(class(gr) == 'list'){
+    gr <- unlist(as(gr, 'GRangesList'))
+  } else if(class(gr) == 'GRangesList'){
+    gr <- unlist(gr)
+  }
+  
   gr.chr <- split(gr, seqnames(gr))
   gr.c <- as(lapply(gr.chr, function(gr0){
-    pos <- unique(sort(c(start(gr0), end(gr0))))
+    pos <- unique(sort(c(start(gr0), end(gr0)+1)))
     GRanges(seqnames = rep(unique(as.character(seqnames(gr0))), length(pos)-1),
             IRanges(start=pos[-length(pos)],
-                    end=pos[-1]))
+                    end=pos[-1] - 1))
   }), 'GRangesList')
   gr.c <- unlist(gr.c)
   gr.c
 }
 
-populateGr <- function(grl, ref.gr, col.id){
+populateGr <- function(grl, ref.gr, col.id=NULL){
+  if(is.null(names(grl))){
+    names(grl) <- letters[1:length(grl)]
+  }
+  
   for(each.id in names(grl)){
     ov.idx <- findOverlaps(grl[[each.id]], ref.gr)
-    mcols(ref.gr)[,each.id] <- NA
-    mcols(ref.gr)[subjectHits(ov.idx),each.id] <- mcols(grl[[each.id]])[queryHits(ov.idx),col.id]
+    if(is.null(col.id)){
+      mcol.mat <- as.data.frame(matrix(as.numeric(),
+                         nrow = length(ref.gr),
+                         ncol = ncol(mcols(grl[[each.id]]))))
+      
+      mcol.mat.tmp <- as.data.frame(mcols(grl[[each.id]])[queryHits(ov.idx),,drop=F])
+      mcol.mat[subjectHits(ov.idx),] <- mcol.mat.tmp
+      colnames(mcol.mat) <- colnames(mcol.mat.tmp)
+
+      mcols(ref.gr) <- cbind(mcols(ref.gr), mcol.mat)
+    } else {
+      mcols(ref.gr)[,each.id] <- NA
+      mcols(ref.gr)[subjectHits(ov.idx),each.id] <- mcols(grl[[each.id]])[queryHits(ov.idx),col.id]
+    }
+    
   }
   ref.gr
 }
 
-reduceGr <- function(grl, sig=1){
-  grl <- lapply(grl, function(gr){
-    mcols(gr) <- apply(mcols(gr), 2, round, digits = sig)
-    gr
-  })
-  gr <- grl[['A']]
-  mcols(gr) <- cbind(mcols(grl[['A']]), mcols(grl[['F']]))
-  colnames(mcols(gr)) <- as.character(sapply(names(grl), paste0, "_", colnames(mcols(grl[[1]]))))
+reduceGr <- function(gr, sig=1){
+  gr <- sort(gr)
+  mcols(gr) <- round(as.matrix(mcols(gr)), sig)
   
   runs <- apply(mcols(gr),1,paste, collapse="_")
   rle.runs <- rle(runs)
   
   idx <- cumsum(rle.runs$lengths)
-  merge.idx <- data.frame("start"=idx[-length(idx)]+1,
-                          "end"=idx[-1])
-  m.gr <- unlist(reduce(as(apply(merge.idx, 1, function(x){
+  merge.df <- data.frame("start"=c(1, idx[-length(idx)]+1),
+                          "end"=idx)
+  
+  nonmerge.idx <- which(rle.runs$length == 1)
+  nonmerge.gr <- gr[merge.df[nonmerge.idx,1]]
+  
+  merge.idx <- which(rle.runs$length > 1)
+  m.gr <- unlist(reduce(as(apply(merge.df[merge.idx,], 1, function(x){
     gr[x[1]:x[2],]
   }), "GRangesList")))
-  mcols(m.gr) <- mcols(gr)[merge.idx$start,]
+  m.gr <- sort(unlist(as(list(nonmerge.gr, m.gr), "GRangesList")))
+  
+  mcols(m.gr) <- mcols(gr)[merge.df$start,]
   m.gr
 }
+
+sampleGisticProfiles <- function(gr, bootstrap=1000, seed=1234){
+  amplitude.idx <- grep("A_", colnames(mcols(gr)))
+  frequency.idx <- grep("F_", colnames(mcols(gr)))
+  
+  freq.mat <- as.matrix(mcols(gr)[,frequency.idx])
+  amp.mat <- as.matrix(mcols(gr)[,amplitude.idx])
+  
+  set.seed(seed)
+  ## Select an element from each row using the probability matrix (row by row)
+  # Random uniform sampling for each row [0-1]
+  random <- matrix(round(runif(nrow(freq.mat) * bootstrap),3), ncol = bootstrap)
+  
+  # Calculate cumulative sum for each row 
+  cumul.w <- freq.mat %*% upper.tri(diag(ncol(freq.mat)), diag = TRUE) / rowSums(freq.mat)
+  cumul.w[,3] <- 1
+  # Identify which range the uniform sampling falls in
+  s.bootstrap <- apply(random, 2, function(x){
+    rowSums(x > cumul.w) + 1L
+  })
+  
+  amp.s.mat <- apply(s.bootstrap, 2, function(s) amp.mat[cbind(seq_along(s), s)])
+  freq.s.mat <- apply(s.bootstrap, 2, function(s) freq.mat[cbind(seq_along(s), s)])
+  
+  list("A"=amp.s.mat,
+       "F"=freq.s.mat)
+}
+
+calcABC <- function(gr, bootstrap=1000, seed=1234){
+  amplitude.idx <- grep("A_", colnames(mcols(gr)))
+  frequency.idx <- grep("F_", colnames(mcols(gr)))
+  seg.mean.idx <- grep("seg.mean", colnames(mcols(gr)))
+  
+  freq.mat <- as.matrix(mcols(gr[,c(frequency.idx)]))
+  abc.mat <- sweep(as.matrix(mcols(gr[,c(amplitude.idx)])), 1,
+                   as.matrix(mcols(gr[,seg.mean.idx])))
+  abc.mat <- floor(abs(abc.mat) * width(gr))
+  
+  
+  set.seed(seed)
+  abc <- lapply(c(1:bootstrap), function(x){
+    s <- apply(freq.mat, 1, function(p) sample(x=c(1:ncol(freq.mat)), 
+                                               size = 1, prob = p))
+    abc.s <- abc.mat[cbind(seq_along(s), s)]
+    freq.s <- freq.mat[cbind(seq_along(s), s)]
+
+    data.frame(abc.s, freq.s)
+  })
+  
+  abcs <- t(sapply(abc, function(x, min.val){
+    c("A"=sum(x[,1], na.rm=T),
+      "F"=sum(log2(x[,2]+min.val), na.rm=T))
+  }, min.val=0.01))
+  
+  min.idx <- apply(abc.mat, 1, which.min)
+  min.abc <- data.frame("A"=sum(abc.mat[cbind(seq_along(min.idx), min.idx)], na.rm=T), 
+                        "F"=sum(log2(freq.mat[cbind(seq_along(min.idx), min.idx)]+0.01), na.rm = T))
+  
+  list("bootstrap"=abcs,
+       "best.fit"=min.abc)
+}
+
 
 
 #### Load ####
@@ -193,24 +280,174 @@ seg$nABraw <- with(seg, nAraw + nBraw)
 seg$seg.mean <- round(log2(seg$nABraw / 2),3)
 seg$seg.mean <- seg$seg.mean - median(rep(seg$seg.mean, seg$width))
 seg$seg.mean[seg$seg.mean < -2] <- -2
+seg.gr <- makeGRangesFromDataFrame(seg, start.field = 'startpos', 
+                                   end.field = 'endpos', keep.extra.columns = T)
+mcols(seg.gr) <- mcols(seg.gr)[,'seg.mean',drop=F]
 
 #### Load in GISTIC Cancer Type ####
-gistic.path <- file.path(gistic.dir, "KIRC", "scores.gistic")
-gistic <- read.table(gistic.path, header=T, stringsAsFactors = F, check.names = F, sep="\t")
-gr <- makeGRangesFromDataFrame(gistic, keep.extra.columns = T)
-grl <- split(gr, gr$Type)
-gr.c.raw <- combineGr(gr)
-gr.c.amp <- populateGr(grl, gr.c.raw, 'average amplitude')
-gr.c.freq <- populateGr(grl, gr.c.raw, 'frequency')
 
-gr.c.amp
-gr.c.freq <- reduceGr(list(gr.c.amp, gr.c.freq), sig=2)
+if(!file.exists(file.path(gistic.dir, "gistic_scores.RData"))){
+  tumor.types <- list.files(gistic.dir)
+  tumor.types <- tumor.types[-grep("LUAD", tumor.types)]
+  all.gistics <- lapply(tumor.types, function(tumor.type){
+    print(tumor.type)
+    gistic.path <- file.path(gistic.dir, tumor.type, "scores.gistic")
+    gistic <- read.table(gistic.path, header=T, stringsAsFactors = F, check.names = F, sep="\t")
+    gr <- makeGRangesFromDataFrame(gistic, keep.extra.columns = T)
+    seqlevelsStyle(gr) <- 'UCSC'
+    grl <- split(gr, gr$Type)
+    gr.c.raw <- combineGr(gr)
+    gr.c.amp <- populateGr(grl, gr.c.raw, col.id = 'average amplitude')
+    gr.c.amp$Neut <- 0
+    gr.c.freq <- populateGr(grl, gr.c.raw, col.id = 'frequency')
+    gr.c <- populateGr(list(gr.c.amp, gr.c.freq), gr.c.raw)
+    colnames(mcols(gr.c)) <- paste0(c(rep("A_", 3), rep("F_",2)), 
+                                    colnames(mcols(gr.c)))
+    
+    gr.c <- reduceGr(gr.c, sig=1)
+    gr.c$F_Neut <- apply(mcols(gr.c), 1, function(x) 1-sum(x[c('F_Del', 'F_Amp')]))
+    gr.c
+  })
+  names(all.gistics) <- tumor.types
+  
+  save(all.gistics, file=file.path(gistic.dir, "gistic_scores.RData"))
+} else {
+  load(file=file.path(gistic.dir, "gistic_scores.RData"))
+}
 
-grl <- list("A"=gr.c.amp, "F"=gr.c.freq)
+fillMissingGistic <- function(gr, col.check='A_Amp'){
+  na.rows <- which(is.na(mcols(gr)[,col.check]))
+  na.cols <- grep("[FA]_", colnames(mcols(gr)), invert = F)
+  mcols(gr)[na.rows,na.cols] <- 0
+  mcols(gr)[na.rows, 'F_Neut'] <- 1
+  
+  ## Remove any NA rows for the given seg
+  seg.col <- grep("[FA]_", colnames(mcols(gr)), invert = T)
+  if(any(is.na(mcols(gr)[,seg.col]))){
+    gr <- gr[-which(is.na(mcols(gr)[,seg.col]))]
+  }
+  gr
+}
 
-#### Exhaustively compare seg to GISTIC Cancer type ####
+mapSegToRef <- function(alt.seg, ref.seg){
+  col.name <- colnames(mcols(alt.seg))
+  
+  ov.idx <- as.data.frame(findOverlaps(alt.seg, ref.seg))
+  split.duplicates <- split(ov.idx, ov.idx$subjectHits)
+  
+  ## Get values and mapping for non-duplicated values
+  nondup.idx <- which(sapply(split.duplicates, nrow)==1)
+  alt.nondup.idx <- sapply(split.duplicates[nondup.idx], function(x) x$queryHits)
+  nondup.val <- mcols(alt.seg)[alt.nondup.idx,col.name]
+  
+  ## Get values and mapping for duplicated values
+  dup.idx <- which(sapply(split.duplicates, nrow)>1)
+  dup.val <- sapply(split.duplicates[dup.idx], function(ov, summary.metric='mean'){
+    switch(summary.metric,
+          mean=mean(mcols(alt.seg[ov$queryHits])[,1], na.rm=T),
+          median=median(mcols(alt.seg[ov$queryHits])[,1], na.rm=T))
+  })
+  
+  ## Initialize the seg.mean column
+  mcols(ref.seg)[,col.name] <- NA
+  ## Fill in non-duplicated values
+  mcols(ref.seg)[nondup.idx,col.name ] <- round(nondup.val,2)
+  ## Fill in duplicated values
+  mcols(ref.seg)[dup.idx,col.name ] <- round(dup.val, 2)
+  ref.seg
+}
 
+calcABC <- function(gr, bootstrap.gr){
+  seg.col <- grep("[FA]_", colnames(mcols(gr)), invert = T)
+  abc <- sweep(bootstrap.gr[['A']], 1, as.matrix(mcols(gr)[,seg.col]), "-")
+  abc <- sweep(abc, 1, width(gr), "*")
+  freq <- colSums(log2(bootstrap.gr[['F']]+0.01), na.rm=T)
+  
+  ## Calculate the best fit model
+  amplitude.idx <- grep("A_", colnames(mcols(gr)))
+  frequency.idx <- grep("F_", colnames(mcols(gr)))
+  seg.mean.idx <- grep("seg.mean", colnames(mcols(gr)))
+  
+  freq.mat <- as.matrix(mcols(gr[,c(frequency.idx)]))
+  amp.mat <- as.matrix(mcols(gr[,c(amplitude.idx)]))
+  seg.mat <- as.matrix(mcols(gr[,c(seg.mean.idx)]))
 
+  abc.seg.mat <- abs(sweep(amp.mat, 1, seg.mat, '-'))
+  abc.seg.mat <- sweep(abc.seg.mat, 1, width(gr), "*")
+  min.idx <- apply(abc.seg.mat, 1, which.min)
+  min.abc <- data.frame("A"=sum(abc.seg.mat[cbind(seq_along(min.idx), min.idx)], na.rm=T), 
+                        "F"=sum(log2(freq.mat[cbind(seq_along(min.idx), min.idx)]+0.01), na.rm = T))
+  
+  list("bootstrap"=data.frame("A"=colSums(abs(abc)),
+                              "F"=freq),
+       "best.fit"=min.abc)
+}
+
+all.abcs <- lapply(all.gistics, function(gr.c, seg.gr){
+  print(1)
+  
+  gr.c.raw <- combineGr(list(seg.gr, gr.c))
+  gr.gistic.seg <- populateGr(list(gr.c, seg.gr), gr.c.raw)
+  gr.gistic.seg <- reduceGr(gr.gistic.seg, sig=1)
+  gr.gistic.seg$A_Del <- -1 * gr.gistic.seg$A_Del
+  gr.gistic.seg <- fillMissingGistic(gr.gistic.seg)
+  
+  
+  #### Exhaustively compare seg to GISTIC Cancer type ####
+  gr.c$A_Del <- -1 * gr.c$A_Del
+  sampled.gistic <- sampleGisticProfiles(gr.gistic.seg, bootstrap=1000, seed=1234)
+  
+  #gr.gistic.seg <- mapSegToRef(seg.gr, gr.c)
+  bootstrap.abc <- calcABC(gr.gistic.seg, sampled.gistic)
+  
+  bootstrap.abc
+}, seg.gr=seg.gr)
+  
+  gr.c.raw <- combineGr(list(seg.gr, gr.c))
+  
+  gr.gistic.seg <- populateGr(list(gr.c, seg.gr), gr.c.raw)
+  gr.gistic.seg <- reduceGr(gr.gistic.seg, sig=1)
+  gr.gistic.seg$A_Del <- -1 * gr.gistic.seg$A_Del
+  gr.gistic.seg <- fillMissingGistic(gr.gistic.seg)
+  
+  abcs <- calcABC(gr.gistic.seg, ...)
+  abcs
+}, seg.gr=seg.gr, bootstrap=1000)
+
+mean.abc <- as.data.frame(t(sapply(all.abcs, function(x) colMeans(x[[1]]))))
+min.abc <- as.data.frame(t(sapply(all.abcs, function(x) unlist(x[[2]]))))
+
+z.abc <- t(sapply(seq_along(all.abcs), function(i, mean.abc, min.abc){
+  .l2 <- function(x, y, c1, c2){
+    sqrt((x-c1)^2 + (y-c2)^2)
+  }
+  d <- .l2(x=all.abcs[[i]][[1]][,1], y=all.abcs[[i]][[1]][,2],  
+           mean.abc[i,1], mean.abc[i,2])
+  sd <- sum(d)/nrow(all.abcs[[i]][[1]])
+  
+  min.d <- .l2(min.abc[i,1], min.abc[i,2], mean.abc[i,1], mean.abc[i,2])
+  c("sd"=sd,
+    "d"=min.d,
+    "z"=(min.d / sd))
+}, mean.abc=mean.abc, min.abc=min.abc))
+z.abc <- as.data.frame(z.abc)
+rownames(z.abc) <- names(all.abcs)
+
+mean.abc[order(mean.abc$A),]
+mean.abc[order(mean.abc$F, decreasing = T),]
+min.abc[order(min.abc$A),]
+z.abc[order(z.abc$z),]
+
+ranks <- rank(mean.abc$A) + rank(abs(mean.abc$F)) + rank(z.abc$z) + rank(min.abc$A)
+names(ranks) <- rownames(mean.abc)
+sort(ranks)
+
+order((0.5*z.abc$z) + (0.5*mean.abc$A))
+z.abc[order((0.5*z.abc$z) + (0.5*mean.abc$A)),]
+z.abc[order(z.abc$z),]
+
+lusc.abcs <- abcs
+kirc.abcs <- abcs
 
 
 
