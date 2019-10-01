@@ -78,9 +78,39 @@ createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T, write.seg=FALSE
     cat(paste0("\t[", aps.cnt, " / ", s.cnt, "] samples with seg-data have an associated annotation and ploidy value \n"))
   }
   
+  ## Create a data structure of ploidy probabilities per TCGA onco-codes
+  cancer.type.ploidy <- split(anno.ploidy.seg, f=anno.ploidy.seg$`cancer type`)
+  col.of.interest <- c('purity', 'ploidy', 'Cancer DNA fraction', 'Subclonal genome fraction')
+  ## Get the counts per breakpoint
+  ctp.breaks <- lapply(cancer.type.ploidy, function(ctp0){
+    tcga.code <- unique(ctp0$`cancer type`)
+    coi.list <- lapply(col.of.interest, function(coi){
+      breaks <- switch(coi,
+                       ploidy=seq(0.05, 10.05, by=0.1),
+                       seq(-0.005, 1.005, by=0.01))
+      gap <- diff(breaks)[1] / 2
+      coi.breaks <- hist(ctp0[,coi], breaks=breaks, plot = F)
+      data.frame("breaks"= coi.breaks$breaks[-length(coi.breaks$breaks)] + gap,
+                 "P"=round(coi.breaks$counts / sum(coi.breaks$counts),3))
+    })
+    names(coi.list) <- col.of.interest
+    coi.list
+  })
+  ## Reduce into a single matrix
+  ctp.break.mats <- lapply(col.of.interest, function(coi){
+    coi.mat <- Reduce(function(x,y) merge(x,y,by='breaks'),
+                      lapply(ctp.breaks, function(cb) cb[[coi]]))
+    colnames(coi.mat) <- c('breaks', names(cancer.type.ploidy))
+    coi.mat
+  })
+  names(ctp.break.mats) <- col.of.interest
+  
+  
+  
   pancan.obj <- list('AP-meta'=anno.ploidy,
                      'APS-meta'=anno.ploidy.seg,
-                     'seg'=seg)
+                     'seg'=seg,
+                     'breaks'=ctp.break.mats)
   
   ## Output stuff
   if(!is.null(out.dir)){
