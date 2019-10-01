@@ -5,7 +5,13 @@ library(GenomicRanges)
 pdir <- "/mnt/work1/users/pughlab/projects/CCLE/eacon"
 gistic.dir <- '/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/gistic/output'
 setwd(pdir)
-sample <- 'ARLES_p_NCLE_DNAAffy2_S_GenomeWideSNP_6_A05_256010'
+
+all.samples <- list.files(pattern="gammaEval.txt$", include.dirs = T, recursive = T)
+all.samples <- sapply(strsplit(all.samples, "/"), function(x) x[1])
+#sample <- 'ARLES_p_NCLE_DNAAffy2_S_GenomeWideSNP_6_A05_256010' # VMRCRCZ_KIDNEY	VMRC-RCZ	renal_cell_carcinoma
+#sample <- 'ARLES_p_NCLE_DNAAffy2_S_GenomeWideSNP_6_B05_256034' # NCIH1975_LUNG non_small_cell_carcinoma
+#sample <- 'ARLES_p_NCLE_DNAAffy2_S_GenomeWideSNP_6_C07_256062' # OVCAR8_OVARY ovary	carcinoma
+
 segmenter <- 'ASCAT'
 gamma <- 0.7
 #my.data <- EaCoN:::loadBestFitRDS(gamma=gamma,sample=sample, segmenter=segmenter)
@@ -15,7 +21,7 @@ pancan.obj <- createPancanSegRef(pancan.dir, out.dir='/mnt/work1/users/pughlab/r
                                  write.seg=T)
 
 #### Functions ####
-loadBestFitRDS <- function(gamma, ...){
+loadBestFitRDS <- function(gamma, segmenter, sample){
   RDS.file <- file.path(sample, toupper(segmenter), 'ASCN', paste0('gamma', format(gamma, nsmall=2)),
                         paste(sample, 'ASCN', toupper(segmenter), 'RDS', sep="."))
   rds <- readRDS(RDS.file)
@@ -278,17 +284,6 @@ calcABC <- function(gr, bootstrap.gr){
 }
 
 
-#### Load ####
-seg <- my.data$segments_raw
-seg$width <- round(with(seg, endpos - startpos)/100000,0) + 1
-seg$nABraw <- with(seg, nAraw + nBraw)
-seg$seg.mean <- round(log2(seg$nABraw / 2),3)
-seg$seg.mean <- seg$seg.mean - median(rep(seg$seg.mean, seg$width))
-seg$seg.mean[seg$seg.mean < -2] <- -2
-seg.gr <- makeGRangesFromDataFrame(seg, start.field = 'startpos', 
-                                   end.field = 'endpos', keep.extra.columns = T)
-mcols(seg.gr) <- mcols(seg.gr)[,'seg.mean',drop=F]
-
 #### Load in GISTIC Cancer Type ####
 
 if(!file.exists(file.path(gistic.dir, "gistic_scores.RData"))){
@@ -320,46 +315,83 @@ if(!file.exists(file.path(gistic.dir, "gistic_scores.RData"))){
   load(file=file.path(gistic.dir, "gistic_scores.RData"))
 }
 
+#### Load in Seg File####
+sample.abcs <- lapply(all.samples[1:10], function(sample){
+  print(paste0("Processing ", sample, "..."))
+  my.data <- loadBestFitRDS(gamma=gamma,sample=sample, segmenter=segmenter)
+  
+  seg <- my.data$segments_raw
+  seg$width <- round(with(seg, endpos - startpos)/100000,0) + 1
+  seg$nABraw <- with(seg, nAraw + nBraw)
+  seg$seg.mean <- round(log2(seg$nABraw / 2),3)
+  seg$seg.mean <- seg$seg.mean - median(rep(seg$seg.mean, seg$width))
+  seg$seg.mean[seg$seg.mean < -2] <- -2
+  seg.gr <- makeGRangesFromDataFrame(seg, start.field = 'startpos', 
+                                     end.field = 'endpos', keep.extra.columns = T)
+  mcols(seg.gr) <- mcols(seg.gr)[,'seg.mean',drop=F]
+  
+  #### Compare ABCs ####
+  all.abcs <- lapply(all.gistics, function(gr.c, seg.gr){
+    print("...")
+    gr.c.raw <- combineGr(list(seg.gr, gr.c))
+    gr.gistic.seg <- populateGr(list(gr.c, seg.gr), gr.c.raw)
+    gr.gistic.seg <- reduceGr(gr.gistic.seg, sig=1)
+    gr.gistic.seg$A_Del <- -1 * gr.gistic.seg$A_Del
+    gr.gistic.seg <- fillMissingGistic(gr.gistic.seg)
+    
+    
+    #### Exhaustively compare seg to GISTIC Cancer type ####
+    gr.c$A_Del <- -1 * gr.c$A_Del
+    sampled.gistic <- sampleGisticProfiles(gr.gistic.seg, bootstrap=1000, seed=1234)
+    
+    #gr.gistic.seg <- mapSegToRef(seg.gr, gr.c)
+    bootstrap.abc <- calcABC(gr.gistic.seg, sampled.gistic)
+    
+    bootstrap.abc
+  }, seg.gr=seg.gr)
+  
+  
+  mean.abc <- as.data.frame(t(sapply(all.abcs, function(x) colMeans(x[[1]]))))
+  min.abc <- as.data.frame(t(sapply(all.abcs, function(x) unlist(x[[2]]))))
+  z.abc <- t(sapply(seq_along(all.abcs), function(i, mean.abc, min.abc){
+    .l2 <- function(x, y, c1, c2){
+      sqrt((x-c1)^2 + (y-c2)^2)
+    }
+    d <- .l2(x=all.abcs[[i]][[1]][,1], y=all.abcs[[i]][[1]][,2],  
+             mean.abc[i,1], mean.abc[i,2])
+    sd <- sum(d)/nrow(all.abcs[[i]][[1]])
+    
+    min.d <- .l2(min.abc[i,1], min.abc[i,2], mean.abc[i,1], mean.abc[i,2])
+    c("sd"=sd,
+      "d"=min.d,
+      "z"=(min.d / sd))
+  }, mean.abc=mean.abc, min.abc=min.abc))
+  z.abc <- as.data.frame(z.abc)
+  rownames(z.abc) <- names(all.abcs)
+  
+  return(list("mean"=mean.abc, "min"=min.abc, "z"=z.abc))
+})
+names(sample.abcs) <- all.samples[1:10]
 
-all.abcs <- lapply(all.gistics, function(gr.c, seg.gr){
-  print(1)
+lapply(sample.abcs, function(x) {
+  mean.abc <- x[['mean']]
+  min.abc <- x[['min']]
+  z.abc <- x[['z']]
   
-  gr.c.raw <- combineGr(list(seg.gr, gr.c))
-  gr.gistic.seg <- populateGr(list(gr.c, seg.gr), gr.c.raw)
-  gr.gistic.seg <- reduceGr(gr.gistic.seg, sig=1)
-  gr.gistic.seg$A_Del <- -1 * gr.gistic.seg$A_Del
-  gr.gistic.seg <- fillMissingGistic(gr.gistic.seg)
+  ranks <- rank(mean.abc$A) + rank(abs(mean.abc$F)) + rank(z.abc$z) + rank(min.abc$A)
+  names(ranks) <- rownames(mean.abc)
+  head(sort(ranks),3)
   
-  
-  #### Exhaustively compare seg to GISTIC Cancer type ####
-  gr.c$A_Del <- -1 * gr.c$A_Del
-  sampled.gistic <- sampleGisticProfiles(gr.gistic.seg, bootstrap=1000, seed=1234)
-  
-  #gr.gistic.seg <- mapSegToRef(seg.gr, gr.c)
-  bootstrap.abc <- calcABC(gr.gistic.seg, sampled.gistic)
-  
-  bootstrap.abc
-}, seg.gr=seg.gr)
+  head(z.abc[order(z.abc$z),], 3)
+})
 
 
-mean.abc <- as.data.frame(t(sapply(all.abcs, function(x) colMeans(x[[1]]))))
-min.abc <- as.data.frame(t(sapply(all.abcs, function(x) unlist(x[[2]]))))
 
-z.abc <- t(sapply(seq_along(all.abcs), function(i, mean.abc, min.abc){
-  .l2 <- function(x, y, c1, c2){
-    sqrt((x-c1)^2 + (y-c2)^2)
-  }
-  d <- .l2(x=all.abcs[[i]][[1]][,1], y=all.abcs[[i]][[1]][,2],  
-           mean.abc[i,1], mean.abc[i,2])
-  sd <- sum(d)/nrow(all.abcs[[i]][[1]])
-  
-  min.d <- .l2(min.abc[i,1], min.abc[i,2], mean.abc[i,1], mean.abc[i,2])
-  c("sd"=sd,
-    "d"=min.d,
-    "z"=(min.d / sd))
-}, mean.abc=mean.abc, min.abc=min.abc))
-z.abc <- as.data.frame(z.abc)
-rownames(z.abc) <- names(all.abcs)
+
+
+
+
+
 
 mean.abc[order(mean.abc$A),]
 mean.abc[order(mean.abc$F, decreasing = T),]
@@ -370,12 +402,19 @@ ranks <- rank(mean.abc$A) + rank(abs(mean.abc$F)) + rank(z.abc$z) + rank(min.abc
 names(ranks) <- rownames(mean.abc)
 sort(ranks)
 
-order((0.5*z.abc$z) + (0.5*mean.abc$A))
-z.abc[order((0.5*z.abc$z) + (0.5*mean.abc$A)),]
-z.abc[order(z.abc$z),]
 
-lusc.abcs <- abcs
-kirc.abcs <- abcs
+#### Machine Learning on Pancan Seg ####
+sample.ids <- names(pancan.obj[['seg']])
+pancan.gr <- lapply(pancan.obj[['seg']], function(x){
+  seg.df <- x[,c('Chromosome', 'Start', 'End', 'Segment_Mean')]
+  seg.df$Segment_Mean <- round(seg.df$Segment_Mean, 2)
+  makeGRangesFromDataFrame(seg.df, keep.extra.columns=T)
+})
+pancan.gr.c <- combineGr(pancan.gr)
+min.bin.size <- 500
+pancan.gr.c <- pancan.gr.c[-which(width(pancan.gr.c) < min.bin.size),]
+pancan.gr.seg <- populateGr(pancan.gr, pancan.gr.c)
+pancan.gr.seg
 
 
 
