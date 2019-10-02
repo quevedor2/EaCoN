@@ -68,7 +68,7 @@ getMapping <- function(in.col='ENTREZID',
   gene.map
 }
 
-fitOptimalGamma <- function(fit.val, sample, meta=NULL, pancan.ploidy=NULL){
+fitOptimalGamma <- function(fit.val, sample=NULL, gamma.meta=NULL, pancan.ploidy=NULL){
   # #### Test Data
   # fit.val <- all.fits[[2]]$fit
   # sample <- all.fits[[2]]$sample
@@ -84,21 +84,21 @@ fitOptimalGamma <- function(fit.val, sample, meta=NULL, pancan.ploidy=NULL){
   }
   
   ### Validation checks
-  if(is.null(meta)){
+  if(is.null(gamma.meta)){
     warning("A meta file is needed to estimate Gamma, otherwise average pancan ploidy is used")
     meta.col.check <- FALSE
   } else {
-    meta.col.check <- all(c("sample", "TCGA_code") %in% colnames(meta))
+    meta.col.check <- all(c("sample", "TCGA_code") %in% colnames(gamma.meta))
     tcga.code <- 'AVG'
   }
   
   if(meta.col.check){
-    sample.row.idx <- match(sample, meta$sample)
+    sample.row.idx <- match(sample, gamma.meta$sample)
     if(is.na(sample.row.idx)){
       warning(paste0(sample, " was not found in the metadata"))
       tcga.code <- 'AVG'
     } else {
-      tcga.code <- meta[sample.row.idx,]$TCGA_code
+      tcga.code <- gamma.meta[sample.row.idx,]$TCGA_code
       if(is.na(tcga.code)){
         warning(paste0(sample, " does not have an annotated TCGA onco-code"))
         tcga.code <- 'AVG'
@@ -109,14 +109,15 @@ fitOptimalGamma <- function(fit.val, sample, meta=NULL, pancan.ploidy=NULL){
     tcga.code <- 'AVG'
   }
   
-  
   ### Calculate best fit:
   ploidy.prior <- pancan.ploidy[,c('breaks', tcga.code)]
   ## Smooth the ploidy curve using a loess fit
-  ploidy.prior$loess <- loess(formula = paste(tcga.code, "breaks", sep = "~"),
-                              data = ploidy.prior,
-                              degree = 1, ncmax= 200,
-                              span = 0.05)$fitted
+  ploidy.prior$loess <- suppressWarnings(
+    loess(formula = paste(tcga.code, "breaks", sep = "~"),
+          data = ploidy.prior,
+          degree = 1, ncmax= 200,
+          span = 0.05)$fitted
+  )
   ploidy.prior$breaks <- round(ploidy.prior$breaks, 1)
   # plot(ploidy.prior[,c('breaks', tcga.code)], type='p')
   # lines(ploidy.prior[,c('breaks', 'loess')], col="blue")
@@ -128,15 +129,18 @@ fitOptimalGamma <- function(fit.val, sample, meta=NULL, pancan.ploidy=NULL){
   
   ## Select the score with the largest gamma
   max.score.idx <- which.max(fit.val.priors$score)
-  fit.val.priors[max.score.idx[length(max.score.idx)],]$gamma
+  return(max.score.idx[length(max.score.idx)])
 }
 
-ASCAT.selectBestFit <- function(fit.val, method='GoF', ...){
-  idx <- switch(method,
+ASCAT.selectBestFit <- function(fit.val, gamma.method='GoF', ...){
+  idx <- switch(gamma.method,
                 "GoF"=which.max(fit.val$GoF),
                 'psi'=which.min(fit.val$psi),
                 'score'=fitOptimalGamma(fit.val, ...))
-  return(fit.val$gamma[idx])
+  gamma <- fit.val$gamma[idx]
+  #EaCoN:::tmsg(paste0("Gamma: ", gamma, " [method=", gamma.method, "]"))
+  
+  return(gamma)
 }
 
 genWindowedBed <- function(bin.size=1000000, seq.style="UCSC"){
@@ -256,14 +260,15 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
 annotateRDS <- function(fit.val, sample, segmenter, build='hg19', 
                         bin.size=50000, ...){
   ## Assemble the ASCAT Seg file into a CNV GRanges object
-  gamma <- ASCAT.selectBestFit(fit.val, method='GoF')
+  gamma <- ASCAT.selectBestFit(fit.val, sample=sample, ...)
   my.data <- loadBestFitRDS(gamma)
   genes <- getGenes(build)
   
-  tmsg(paste0("Annotating sample: ", sample, "..."))
+  print(paste0("Annotating sample: ", sample, "..."))
   cnv <- makeGRangesFromDataFrame(my.data$segments_raw, keep.extra.columns=TRUE, 
                                   start.field='startpos', end.field='endpos')
   cnv <- cleanGR(cnv)
+  print("Yes?")
   
   ## Annotate the CNVs based on:
   cl.anno <- list()
@@ -308,7 +313,7 @@ annotateRDS.Batch <- function(all.fits, segmenter, nthread = 1,
                                   .inorder = TRUE, 
                                   .errorhandling = "stop",
                                   .export = ls(globalenv())) %dopar% {
-                                    annotateRDS(r$fit, r$sample, segmenter, build='hg19', bin.size=50000)
+                                    annotateRDS(r$fit, r$sample, segmenter, build='hg19', bin.size=50000, ...)
                                   }
   parallel::stopCluster(cl)
   names(grcnv.batch) <- sapply(all.fits, function(x) x$sample)

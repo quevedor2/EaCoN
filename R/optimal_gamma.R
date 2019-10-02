@@ -101,6 +101,8 @@ createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T, write.seg=FALSE
     coi.mat <- Reduce(function(x,y) merge(x,y,by='breaks'),
                       lapply(ctp.breaks, function(cb) cb[[coi]]))
     colnames(coi.mat) <- c('breaks', names(cancer.type.ploidy))
+    coi.mat$AVG <- rowMeans(coi.mat[,-1])
+    plot(coi.mat[,c('breaks', 'AVG')])
     coi.mat
   })
   names(ctp.break.mats) <- col.of.interest
