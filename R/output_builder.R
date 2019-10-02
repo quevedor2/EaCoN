@@ -1,7 +1,8 @@
 ######################################
 #### Load and Clean the ASCAT RDS ####
-loadBestFitRDS <- function(gamma, ...){
-  RDS.file <- file.path(sample, toupper(segmenter), 'ASCN', paste0('gamma', format(gamma, nsmall=2)),
+loadBestFitRDS <- function(sample, gamma, segmenter){
+  RDS.file <- file.path(sample, toupper(segmenter), 'ASCN', 
+                        paste0('gamma', format(gamma, nsmall=2)),
                         paste(sample, 'ASCN', toupper(segmenter), 'RDS', sep="."))
   rds <- readRDS(RDS.file)
   return(rds)
@@ -261,7 +262,7 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
                         bin.size=50000, ...){
   ## Assemble the ASCAT Seg file into a CNV GRanges object
   gamma <- ASCAT.selectBestFit(fit.val, sample=sample, ...)
-  my.data <- loadBestFitRDS(gamma)
+  my.data <- loadBestFitRDS(sample, gamma, segmenter)
   genes <- getGenes(build)
   
   tmsg(paste0("Annotating sample: ", sample, " [gamma:", gamma, "]..."))
