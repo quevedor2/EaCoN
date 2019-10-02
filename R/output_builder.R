@@ -127,6 +127,7 @@ fitOptimalGamma <- function(fit.val, sample=NULL, gamma.meta=NULL, pancan.ploidy
   
   ## Create a score: (Goodnes_of_Fit * ploidy_likelihood)
   fit.val.priors$score <- with(fit.val.priors, GoF * loess)
+  fit.val.priors <- fit.val.priors[order(fit.val.priors$gamma),]
   
   ## Select the score with the largest gamma
   max.score.idx <- which.max(fit.val.priors$score)
@@ -269,8 +270,7 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   cnv <- makeGRangesFromDataFrame(my.data$segments_raw, keep.extra.columns=TRUE, 
                                   start.field='startpos', end.field='endpos')
   cnv <- cleanGR(cnv)
-  print("Yes?")
-  
+
   ## Annotate the CNVs based on:
   cl.anno <- list()
   # Bins
