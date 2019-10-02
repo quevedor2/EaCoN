@@ -18,8 +18,9 @@
   #my.data <- EaCoN:::loadBestFitRDS(gamma=gamma,sample=sample, segmenter=segmenter)
   my.data <- loadBestFitRDS(gamma=gamma,sample=sample, segmenter=segmenter)
   pancan.dir <- '/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/raw'
-  pancan.obj <- createPancanSegRef(pancan.dir, out.dir='/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/cleaned',
-                                   write.seg=T)
+  pancan.obj <- createPancanSegRef(ref.dir=pancan.dir, 
+                                   out.dir='/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/cleaned',
+                                   write.seg=F)
 }
 
 #### Functions ####
@@ -30,11 +31,33 @@ loadBestFitRDS <- function(gamma, segmenter, sample){
   return(rds)
 }
 
-createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T, write.seg=FALSE){
+createPancanSegRef <- function(ref.dir=NULL, out.dir=NULL, verbose=T, 
+                               write.seg=FALSE, download.files=FALSE){
+  if(is.null(ref.dir)){
+    self.pkg.name <- 'EaCoN'
+    ref.dir <- system.file("data-raw/", package = self.pkg.name)
+  }
   setwd(ref.dir)
-  seg.f <- list.files(pattern="whitelisted.seg$")
-  anno.f <- list.files(pattern="annotations.tsv$")
-  ploidy.f <- list.files(pattern="JSedit.fixed.txt$")
+  
+  ## Check if files exist:
+  .checkAndDownloadFile <- function(pattern, download){
+    f <- list.files(pattern=pattern)
+    if(length(f) == 0 & download){
+      file.id <- gsub("\\..*", "", pattern)
+      url <- switch(file.id,
+                    whitelisted='http://api.gdc.cancer.gov/data/4f277128-f793-4354-a13d-30cc7fe9f6b5',
+                    annotations='http://api.gdc.cancer.gov/data/1a7d7be8-675d-4e60-a105-19d4121bdebf',
+                    JSedit='http://api.gdc.cancer.gov/data/4f277128-f793-4354-a13d-30cc7fe9f6b5')
+      #download.file(url, destfile = ".", method = 'curl')
+      #f <- list.files(pattern=pattern)
+    } else if(length(f) == 0 & !download) {
+      stop("download argument is set to FALSE, please go manually download the data at https://gdc.cancer.gov/about-data/publications/pancanatlas")
+    }
+    f
+  }
+  seg.f <- .checkAndDownloadFile(pattern="whitelisted.seg$", download=download)
+  anno.f <- .checkAndDownloadFile(pattern="annotations.tsv$", download=download)
+  ploidy.f <- .checkAndDownloadFile(pattern="JSedit.fixed.txt$", download=download)
   pancan.files <- list("seg"=seg.f, "anno"=anno.f, "ploidy"=ploidy.f)
   
   pancan.data <- lapply(pancan.files, read.table, sep="\t", header=T, 
@@ -104,7 +127,7 @@ createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T, write.seg=FALSE
                       lapply(ctp.breaks, function(cb) cb[[coi]]))
     colnames(coi.mat) <- c('breaks', names(cancer.type.ploidy))
     coi.mat$AVG <- rowMeans(coi.mat[,-1])
-    plot(coi.mat[,c('breaks', 'AVG')])
+    # plot(coi.mat[,c('breaks', 'AVG')])
     coi.mat
   })
   names(ctp.break.mats) <- col.of.interest
@@ -117,13 +140,17 @@ createPancanSegRef <- function(ref.dir, out.dir=NULL, verbose=T, write.seg=FALSE
                      'breaks'=ctp.break.mats)
   
   ## Output stuff
-  if(!is.null(out.dir)){
-    if(!dir.exists(out.dir)){
-      dir.create(path = out.dir, recursive = T)
-      warning(paste("Outputing to directory: ", out.dir))
-    }
-    saveRDS(pancan.obj, file = file.path(out.dir, "pancanPloidy.RDS"))
+  if(is.null(out.dir)){
+    out.dir <- system.file("data/", package = self.pkg.name)
   }
+  if(!dir.exists(out.dir)){
+    dir.create(path = out.dir, recursive = T)
+    warning(paste("Outputing to directory: ", out.dir))
+  }
+  pancan.obj.segless <- pancan.obj[-grep("seg", names(pancan.obj))]
+  save(pancan.obj.segless, file=file.path(out.dir, "pancanPloidy.noSegs.rda"))
+  save(pancan.obj, file=file.path(out.dir, "pancanPloidy.rda"))
+  #saveRDS(pancan.obj, file = file.path(out.dir, "pancanPloidy.RDS"))
   
   ## Writes cancer-specific seg files
   if(write.seg & !is.null(out.dir)){
