@@ -138,7 +138,7 @@ ASCAT.selectBestFit <- function(fit.val, gamma.method='GoF', ...){
                 'psi'=which.min(fit.val$psi),
                 'score'=fitOptimalGamma(fit.val, ...))
   gamma <- fit.val$gamma[idx]
-  #EaCoN:::tmsg(paste0("Gamma: ", gamma, " [method=", gamma.method, "]"))
+  tmsg(paste0("Gamma: ", gamma, " [method=", gamma.method, "]"))
   
   return(gamma)
 }
@@ -264,7 +264,7 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   my.data <- loadBestFitRDS(gamma)
   genes <- getGenes(build)
   
-  print(paste0("Annotating sample: ", sample, "..."))
+  tmsg(paste0("Annotating sample: ", sample, " [gamma:", gamma, "]..."))
   cnv <- makeGRangesFromDataFrame(my.data$segments_raw, keep.extra.columns=TRUE, 
                                   start.field='startpos', end.field='endpos')
   cnv <- cleanGR(cnv)
