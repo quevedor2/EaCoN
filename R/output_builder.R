@@ -68,11 +68,61 @@ getMapping <- function(in.col='ENTREZID',
   gene.map
 }
 
+fitOptimalGamma <- function(fit.val, sample, meta, pancan.ploidy=NULL){
+  # #### Test Data
+  # fit.val <- all.fits[[2]]$fit
+  # sample <- all.fits[[2]]$sample
+  # meta <- ccle.meta[,c('SNP arrays', 'tcga_code')]
+  # colnames(meta) <- c('sample', 'TCGA_code')
+  # ####
+  
+  if(is.null(pancan.ploidy)){
+    ## Load the pancan.ploidy dataset
+    pancan.dir <- "/mnt/work1/users/pughlab/references/TCGA/TCGA_Pancan_ploidyseg/cleaned"
+    pancan.data <- readRDS(file=file.path(pancan.dir, 'pancanPloidy.RDS'))
+    pancan.ploidy <- pancan.data$breaks$ploidy
+  }
+  
+  meta.col.check <- all(c("sample", "TCGA_code") %in% colnames(meta))
+  if(meta.col.check){
+    sample.row.idx <- match(sample, meta$sample)
+    if(is.na(sample.row.idx)){
+      warning(paste0(sample, " was not found in the metadata"))
+      tcga.code <- 'AVG'
+    } else {
+      tcga.code <- meta[sample.row.idx,]$TCGA_code
+      if(is.na(tcga.code)){
+        warning(paste0(sample, " does not have an annotated TCGA onco-code"))
+        tcga.code <- 'AVG'
+      } 
+    }
+    
+    ploidy.prior <- pancan.ploidy[,c('breaks', tcga.code)]
+    ## Smooth the ploidy curve using a loess fit
+    ploidy.prior$loess <- loess(formula = paste(tcga.code, "breaks", sep = "~"),
+                                data = ploidy.prior,
+                                degree = 1, ncmax= 200,
+                                span = 0.05)$fitted
+    ploidy.prior$breaks <- round(ploidy.prior$breaks, 1)
+    # plot(ploidy.prior[,c('breaks', tcga.code)], type='p')
+    # lines(ploidy.prior[,c('breaks', 'loess')], col="blue")
+    fit.val$ploidy.round <- round(fit.val$psi,1)
+    fit.val.priors <- merge(fit.val, ploidy.prior, by.x='ploidy.round', by.y='breaks', all.x=T)
+    
+    ## Create a score: (Goodnes_of_Fit * ploidy_likelihood)
+    fit.val.priors$score <- with(fit.val.priors, GoF * loess)
+    
+    ## Select the score with the largest gamma
+    max.score.idx <- which.max(fit.val.priors$score)
+    fit.val.priors[max.score.idx[length(max.score.idx)],]$gamma
+  }
+}
 
-ASCAT.selectBestFit <- function(fit.val, method='GoF'){
+ASCAT.selectBestFit <- function(fit.val, method='GoF', ...){
   idx <- switch(method,
                 "GoF"=which.max(fit.val$GoF),
-                'psi'=which.min(fit.val$psi))
+                'psi'=which.min(fit.val$psi),
+                'meta'=fitOptimalGamma(fit.val, ...))
   return(fit.val$gamma[idx])
 }
 
