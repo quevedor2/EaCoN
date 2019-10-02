@@ -34,7 +34,26 @@
 #' Merged Sample Quality Annotations - merged_sample_quality_annotations.tsv
 #' 
 #' @examples
-#' data(pancan.obj.segless)
+#' data(pancanPloidy.noSegs)
 #' pancan.ploidy <- pancan.obj.segless$breaks$ploidy
 #' pancan.ploidy[,c('breaks', 'ACC')]
 "pancan.obj.segless"
+
+
+#' CCLE Metadata
+#'
+#' @docType data
+#'
+#' @usage data(CCLE_meta)
+#'
+#' @format A dataframe containing CCLE metadata:
+#' 
+#' @keywords datasets
+#'
+#' @source \href{https://data.broadinstitute.org/ccle/Cell_lines_annotations_20181226.txt}{CCLE metadata}
+#' CCLE_sample_info_file_2012-10-18.txt
+#' Cell_lines_annotations_20181226.txt
+#' 
+#' @examples
+#' data(CCLE_meta)
+"ccle.meta"
