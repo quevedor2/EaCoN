@@ -110,6 +110,10 @@ fitOptimalGamma <- function(fit.val, sample=NULL, gamma.meta=NULL, pancan.ploidy
     tcga.code <- 'AVG'
   }
   
+  if(tcga.code == 'COAD/READ'){
+    tcga.code <- 'COAD'
+  }
+  
   ### Calculate best fit:
   ploidy.prior <- pancan.ploidy[,c('breaks', tcga.code)]
   ## Smooth the ploidy curve using a loess fit
@@ -262,6 +266,8 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
 annotateRDS <- function(fit.val, sample, segmenter, build='hg19', 
                         bin.size=50000, ...){
   ## Assemble the ASCAT Seg file into a CNV GRanges object
+  # gamma <- ASCAT.selectBestFit(fit.val, sample=sample, gamma.method='score',
+  #                              gamma.meta=meta, pancan.ploidy=pancan.ploidy)
   gamma <- ASCAT.selectBestFit(fit.val, sample=sample, ...)
   my.data <- loadBestFitRDS(sample, gamma, segmenter)
   genes <- getGenes(build)
