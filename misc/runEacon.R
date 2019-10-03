@@ -82,23 +82,29 @@ force = FALSE
 ##############
 #### Main ####
 
-#devtools::install_github("quevedor2/EaCoN", ref = 'preprocess-builder')
+#devtools::install_github("quevedor2/EaCoN", ref = 'gamma')
 library(optparse)
 library(EaCoN)
 library(parallel)
 
-# option_list <- list(make_option(c("-i", "--idx"), type="integer", default=NULL,
-#               help="Index of sample group [default= %default]", metavar="integer"))
-# opt_parser <- OptionParser(option_list=option_list)
-# opt <- parse_args(opt_parser)
+option_list <- list(make_option(c("-i", "--idx"), type="integer", default=NULL,
+              help="Index of sample group [default= %default]", metavar="integer"))
+opt_parser <- OptionParser(option_list=option_list)
+opt <- parse_args(opt_parser)
 
-pdir <- '/mnt/work1/users/pughlab/projects/CCLE'
+dataset <- 'GDSC'
+pdir <- file.path('/mnt/work1/users/pughlab/projects', dataset)
 
 ## Normalization
 # Outputs a ./YT_4941/YT_4941_GenomeWideSNP_6_hg19_processed.RDS file
-CEL.dir <- file.path(pdir, "data", "symlinks")
-sample.ids <- list.files(CEL.dir, pattern="CEL$")
-sample.ids <- gsub(".cel", "", sample.ids, ignore.case = TRUE)
+CEL.dir <- file.path(pdir, "data")
+sample.paths <- list.files(CEL.dir, pattern="CEL$", recursive = T, 
+                         ignore.case = T, full.names = T)
+sample.ids <- gsub(".cel", "", basename(sample.paths), ignore.case = TRUE)
+regm <- regexpr(".cel", basename(sample.paths), ignore.case=T)
+cel.suffix <- regmatches(x = basename(sample.paths), m = regm)
+
+
 
 
 dir.create(file.path(pdir, "eacon"), recursive = TRUE)
@@ -109,16 +115,19 @@ if(qsub.split){
   if(file.exists(file.path("..", "scripts", "samples.RData"))){
     EaCoN:::tmsg("Getting sample IDs...")
     load(file.path("..", "scripts", "samples.RData"))
-    # range.s <- seq(1, length(sample.ids), by=10)
-    # range.e <- c((range.s + 9), length(sample.ids))
-    # range.idx <- opt$idx
-    # 
-    # range.se <- c(range.s[range.idx], range.e[range.idx])
-    # print(paste0(range.idx, " : ", paste(range.se, collapse="-")))
-    # 
-    # sample.ids <- sample.ids[range.se[1]:range.se[2]]
-    sample.ids <- sample.ids[opt$idx]
+    range.s <- seq(1, length(sample.ids), by=10)
+    range.e <- c((range.s + 9), length(sample.ids))
+    range.idx <- opt$idx
+
+    range.se <- c(range.s[range.idx], range.e[range.idx])
+    print(paste0(range.idx, " : ", paste(range.se, collapse="-")))
+
+    sample.ids <- sample.ids[range.se[1]:range.se[2]]
+    #sample.ids <- sample.ids[opt$idx]
   } else {
+    # fit.vals.path <- list.files(pattern="gammaEval.txt", recursive=T, full=T)
+    # rm.idx <- unlist(sapply(sample.ids, function(x) any(grepl(x, fit.vals.path))))
+    
     rm.idx <- sapply(sample.ids, function(s){
       if(dir.exists(s)){
         if(any(grepl("temp", list.files(s)))){
@@ -137,19 +146,20 @@ if(qsub.split){
       }
     })
     
-    names(rm.idx) <- sample.ids
-    sample.ids <- sample.ids[-which(rm.idx)]
-    sample.ids <- sample.ids[sample(x = c(1:length(sample.ids)), size = length(sample.ids), replace = F)]
+    #names(rm.idx) <- sample.ids
+    if(sum(rm.idx) > 0) sample.ids <- sample.ids[-which(rm.idx)]
+    #sample.ids <- sample.ids[sample(x = c(1:length(sample.ids)), size = length(sample.ids), replace = F)]
     
     EaCoN:::tmsg("Saving samples...")
     save(sample.ids, file=file.path("..", "scripts", "samples.RData"))
   }
 }
 
-mclapply(sample.ids, function(sample){
-  SNP6.Process(CEL = file.path(CEL.dir, paste0(sample, ".CEL")), 
+mclapply(sample.ids, function(sample, sample.paths){
+  idx <- grep(sample, basename(sample.paths))
+  SNP6.Process(CEL = file.path(CEL.dir, paste0(sample, cel.suffix[idx])), 
                samplename = sample)
-}, mc.cores = 10)
+}, sample.paths=sample.paths, mc.cores = 2)
 
 
 ## Segmentation:
@@ -158,32 +168,68 @@ for(segmenter in c("ASCAT")){
   print(segmenter)
   RDS.files <- list.files(pattern="_processed", recursive = TRUE, full.names = TRUE)
   Segment.ff.Batch(RDS.file = RDS.files,  segmenter = segmenter, nthread=5)
-  
-  ## CN Estimation:
-  # Provides ASCN calls from ASCAT
-  l2r.rds <- list.files(pattern=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"), recursive=T, full=T)
-  if(any(grepl('bkup', l2r.rds))) l2r.rds <- l2r.rds[-grep("bkup", l2r.rds)]
-  fit.val <- ASCN.ff.Batch(RDS.files = l2r.rds, nthread=5)
 }
 
 for(segmenter in c("ASCAT")){
   print(segmenter)
+  ## CN Estimation:
+  # Provides ASCN calls from ASCAT
+  l2r.rds <- list.files(pattern=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"), recursive=T, full=T)
+  l2r.rds <- l2r.rds[unlist(sapply(sample.ids, grep, l2r.rds))]
+  print(l2r.rds)
+  #if(any(grepl('bkup', l2r.rds))) l2r.rds <- l2r.rds[-grep("bkup", l2r.rds)]
+  fit.val <- ASCN.ff.Batch(RDS.files = l2r.rds, nthread=2)
+}
+
+for(segmenter in c("ASCAT")){
+  segmenter <- 'ASCAT'
+  print(segmenter)
   if(toupper(segmenter)=='ASCAT'){
-    fit.vals.path <- list.files(pattern="gammaEval.txt", recursive=T, full=T)
-    fit.vals.path <- fit.vals.path[-grep("bkup", fit.vals.path)]
+    
+    fit.vals.path <- unlist(sapply(list.files(), function(x){
+      if(file.exists(file.path(x, segmenter, "ASCN", 
+                               paste0(x, ".gammaEval.txt")))){
+        file.path(".", x, segmenter, "ASCN", paste0(x, ".gammaEval.txt"))
+      }
+    }))
+    # fit.vals.path <- list.files(pattern="gammaEval.txt", recursive=T, full=T)
+    
+    if(any(grepl("bkup", fit.vals.path))) fit.vals.path <- fit.vals.path[-grep("bkup", fit.vals.path)]
     all.fits <- lapply(fit.vals.path, function(fvp){
       list(fit=read.table(fvp, sep="\t", header=T, stringsAsFactors = F, 
                           check.names = F, fill=F),
            sample=strsplit(fvp, "/")[[1]][2])
     })
-    names(all.fits) <-sapply(all.fits, function(x) x)
+    names(all.fits) <- sapply(all.fits, function(x) x$sample)
     
-    gr.cnv <- annotateRDS.Batch(all.fits, toupper(segmenter), nthread=3)
+    data(CCLE_meta)
+    meta <- ccle.meta[,c('SNP arrays', 'tcga_code')]
+    colnames(meta) <- c('sample', 'TCGA_code')
     
-    cbio.path=file.path("out", "cBio")
-    buildCbioOut(gr.cnv, cbio.path="./out/cBio", overwrite=sample)
+    data(pancanPloidy.noSegs)
+    pancan.ploidy <- pancan.obj.segless$breaks$ploidy
+    # plot(pancan.ploidy[,c('breaks', 'BRCA')], type='l')
     
-    pset.path=file.path("out", "PSet")
-    buildPSetOut(gr.cnv, "CGP", pset.path, meta=cell.line.anno)
+    max.process <- 50
+    split.range <- seq(1, length(all.fits), by=max.process)
+    split.range <- data.frame("start"=split.range,
+                              "end"=c(split.range[-1]-1, length(all.fits)))
+    r <- apply(split.range, 1, function(r){
+      print(paste(r, collapse="-"))
+      print(paste(r, collapse="-"))
+      
+      gr.cnv <- annotateRDS.Batch(all.fits[r['start']:r['end']], 
+                                  toupper(segmenter), nthread=3,
+                                  gamma.method='score', gamma.meta=meta,
+                                  pancan.ploidy=pancan.ploidy)
+      
+      cbio.path=file.path("out", "cBio")
+      buildCbioOut(gr.cnv, cbio.path="./out/cBio")
+      
+      pset.path=file.path("out", "PSet")
+      buildPSetOut(gr.cnv, "CGP", pset.path, meta=ccle.meta)
+      r
+    })
+    
   }
 }

@@ -399,7 +399,7 @@ annotateRDS.Batch <- function(all.fits, segmenter, nthread = 1,
 #' @examples
 #'     buildCbioOut(gr.cnv, cbio.path="./out/cBio", overwrite=c('YT_4941', '5637_3858'))
 buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA", 
-                         cbio.cna.file=NULL, cbio.linear.file=NULL, cbio.seg.file=NULL,
+                         cbio.cna.file=NULL, cbio.linear.file=NULL, cbio.seg.file=NULL, cbio.RAWseg.file=NULL,
                          amp.thresh=5, add.on.to.existing=TRUE, ...){
   .checkFile <- function(cbio.path, file.id, pat){
     idx <- grep(list.files(cbio.path), pattern=pat, perl=TRUE)[1]
@@ -451,7 +451,10 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
     cbio.linear.file <- .checkFile(cbio.path, 'data_linear_CNA.txt',   pat=paste0("linear", pattern))
   }
   if(is.null(cbio.seg.file)){
-    cbio.seg.file <- .checkFile(cbio.path, 'data_cna_hg19.seg',   pat='seg$')
+    cbio.seg.file <- .checkFile(cbio.path, 'data_cna_hg19.seg',   pat='^data.*seg$')
+  }
+  if(is.null(cbio.RAWseg.file)){
+    cbio.RAWseg.file <- .checkFile(cbio.path, 'RAWdata_cna_hg19.seg',   pat='^RAW.*seg$')
   }
   
   ## Create the data_CNA.txt file: https://docs.cbioportal.org/5.1-data-loading/data-loading/file-formats#discrete-copy-number-data
@@ -481,8 +484,10 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
       linear.mat <- .appendToCbioMat(cbio.path, cbio.linear.file, linear.mat, ...)
     }
     if(as.logical(cbio.seg.file['exists'])){
-      raw.segs <- .appendToCbioSeg(cbio.path, cbio.seg.file, raw.segs, raw=TRUE, ...)
       segs <- .appendToCbioSeg(cbio.path, cbio.seg.file, segs, ...)
+    }
+    if(as.logical(cbio.RAWseg.file['exists'])){
+      raw.segs <- .appendToCbioSeg(cbio.path, cbio.RAWseg.file, raw.segs, raw=TRUE, ...)
     }
   }
   
@@ -490,6 +495,7 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
   .write <- function(...){
     write.table(..., sep="\t", col.names=TRUE, row.names=FALSE, quote=F)
   }
+  .write(x=raw.segs, file=file.path(cbio.path, cbio.RAWseg.file['file']))
   .write(x=segs, file=file.path(cbio.path, cbio.seg.file['file']))
   .write(x=cna.mat, file=file.path(cbio.path, cbio.cna.file['file']))
   .write(x=linear.mat, file=file.path(cbio.path, cbio.linear.file['file']))
