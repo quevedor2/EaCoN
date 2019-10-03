@@ -86,6 +86,7 @@ force = FALSE
 library(optparse)
 library(EaCoN)
 library(parallel)
+library(Biobase)
 
 option_list <- list(make_option(c("-i", "--idx"), type="integer", default=NULL,
               help="Index of sample group [default= %default]", metavar="integer"))
@@ -210,7 +211,7 @@ for(segmenter in c("ASCAT")){
     pancan.ploidy <- pancan.obj.segless$breaks$ploidy
     # plot(pancan.ploidy[,c('breaks', 'BRCA')], type='l')
     
-    max.process <- 50
+    max.process <- 10
     split.range <- seq(1, length(all.fits), by=max.process)
     split.range <- data.frame("start"=split.range,
                               "end"=c(split.range[-1]-1, length(all.fits)))

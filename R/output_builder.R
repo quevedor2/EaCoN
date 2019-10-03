@@ -113,6 +113,10 @@ fitOptimalGamma <- function(fit.val, sample=NULL, gamma.meta=NULL, pancan.ploidy
   if(tcga.code == 'COAD/READ'){
     tcga.code <- 'COAD'
   }
+  if(!any(grepl(tcga.code, colnames(pancan.ploidy)))){
+    warning(paste0("Could not find any TCGA code to match: ", tcga.code))
+    tcga.code <- 'AVG'
+  }
   
   ### Calculate best fit:
   ploidy.prior <- pancan.ploidy[,c('breaks', tcga.code)]
