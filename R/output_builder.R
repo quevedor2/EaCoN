@@ -330,9 +330,9 @@ annotateRDS.Batch <- function(all.fits, segmenter, nthread = 1,
 ############################################
 #### Building cBioportal Output Objects ####
 .appendToCbioSeg <- function(cbio.path, cbio.file, seg, raw=FALSE, overwrite=NULL){
-  if(raw){
-    cbio.file['file'] <- paste0("RAW", cbio.file['file'])
-  }
+  # if(raw){
+  #   cbio.file['file'] <- paste0("RAW", cbio.file['file'])
+  # }
   exist.seg <- read.table(file.path(cbio.path, cbio.file['file']), sep="\t", header=T,
                           stringsAsFactors = F, check.names = F, fill=F)
   exist.spl <- split(exist.seg, f=exist.seg$ID)
