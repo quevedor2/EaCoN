@@ -88,8 +88,11 @@ library(EaCoN)
 library(parallel)
 library(Biobase)
 
-option_list <- list(make_option(c("-i", "--idx"), type="integer", default=NULL,
-              help="Index of sample group [default= %default]", metavar="integer"))
+option_list <- list(
+  make_option(c("-i", "--idx"), type="integer", default=NULL,
+              help="Index of sample group [default= %default]", metavar="integer"),
+  make_option(c("-g", "--grpsize"), type="integer", default=10,
+              help="Size of the groups to run in one job [default= %default]", metavar="integer"))
 opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
 
@@ -110,6 +113,36 @@ cel.suffix <- regmatches(x = basename(sample.paths), m = regm)
 
 dir.create(file.path(pdir, "eacon"), recursive = TRUE)
 setwd(file.path(pdir, "eacon"))
+
+.splitSamples <- function(sample.ids, range.idx, grp.size=10){
+  if((grp.size * range.idx) > length(sample.ids)){
+    NULL 
+  } else {
+    if(grp.size > 1){
+      range.s <- seq(1, length(sample.ids), by=grp.size)
+      range.e <- c((range.s + (grp.size-1)), length(sample.ids))
+      
+      range.se <- c(range.s[range.idx], range.e[range.idx])
+      print(paste0(range.idx, " : ", paste(range.se, collapse="-")))
+      sample.ids[range.se[1]:range.se[2]]
+    } else {
+      sample.ids[range.idx]
+    }
+  }
+}
+
+.removeRedundantFiles <- function(pattern1, pattern2){
+  p1.files <- list.files(pattern=pattern1, recursive = TRUE, full.names = TRUE)
+  p2.files <- list.files(pattern=pattern2, recursive=T, full=T)
+  rm.ids <- sapply(strsplit(p2.files, "/"), function(x) x[[2]])
+  rm.idx <- unlist(sapply(rm.ids, function(x) grep(paste0("\\/", x, "\\/"), p1.files)))
+  if(length(rm.idx) > 0){
+    p1.files[-rm.idx]
+  } else {
+    p1.files
+  }
+}
+
 
 qsub.split <- TRUE
 if(qsub.split){
@@ -163,25 +196,34 @@ mclapply(sample.ids, function(sample, sample.paths){
 }, sample.paths=sample.paths, mc.cores = 2)
 
 
-## Segmentation:
+#### L2R Segmentation: ####
 # Takes in the _processed.RDS file 
 for(segmenter in c("ASCAT")){
   print(segmenter)
-  RDS.files <- list.files(pattern="_processed", recursive = TRUE, full.names = TRUE)
+  
+  ## Select non-processed files
+  RDS.files <- .removeRedundantFiles(pattern1="_processed.RDS$", 
+                                     pattern2=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"))
+  RDS.files <- .splitSamples(RDS.files, opt$idx, opt$grpsize)
+  
   Segment.ff.Batch(RDS.file = RDS.files,  segmenter = segmenter, nthread=5)
 }
 
+#### ASCN Calls: ####
 for(segmenter in c("ASCAT")){
   print(segmenter)
   ## CN Estimation:
   # Provides ASCN calls from ASCAT
-  l2r.rds <- list.files(pattern=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"), recursive=T, full=T)
-  l2r.rds <- l2r.rds[unlist(sapply(sample.ids, grep, l2r.rds))]
+  l2r.rds <- .removeRedundantFiles(pattern1=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"), 
+                                   pattern2="gammaEval.txt$")
+  l2r.rds <- .splitSamples(l2r.rds, opt$idx, opt$grpsize)
   print(l2r.rds)
-  #if(any(grepl('bkup', l2r.rds))) l2r.rds <- l2r.rds[-grep("bkup", l2r.rds)]
+  
   fit.val <- ASCN.ff.Batch(RDS.files = l2r.rds, nthread=2)
 }
 
+
+#### Output builder: ####
 for(segmenter in c("ASCAT")){
   segmenter <- 'ASCAT'
   print(segmenter)
@@ -217,7 +259,6 @@ for(segmenter in c("ASCAT")){
                               "end"=c(split.range[-1]-1, length(all.fits)))
     r <- apply(split.range, 1, function(r){
       print(paste(r, collapse="-"))
-      print(paste(r, collapse="-"))
       
       gr.cnv <- annotateRDS.Batch(all.fits[r['start']:r['end']], 
                                   toupper(segmenter), nthread=3,
@@ -229,6 +270,7 @@ for(segmenter in c("ASCAT")){
       
       pset.path=file.path("out", "PSet")
       buildPSetOut(gr.cnv, "CGP", pset.path, meta=ccle.meta)
+      gc()
       r
     })
     
