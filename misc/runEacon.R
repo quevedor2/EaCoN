@@ -131,16 +131,25 @@ setwd(file.path(pdir, "eacon"))
   }
 }
 
-.removeRedundantFiles <- function(pattern1, pattern2){
+.removeRedundantFiles <- function(pattern1, pattern2, unlink.path=NULL){
   p1.files <- list.files(pattern=pattern1, recursive = TRUE, full.names = TRUE)
   p2.files <- list.files(pattern=pattern2, recursive=T, full=T)
   rm.ids <- sapply(strsplit(p2.files, "/"), function(x) x[[2]])
   rm.idx <- unlist(sapply(rm.ids, function(x) grep(paste0("\\/", x, "\\/"), p1.files)))
   if(length(rm.idx) > 0){
-    p1.files[-rm.idx]
+    p.files <- p1.files[-rm.idx]
   } else {
-    p1.files
+    p.files <- p1.files
   }
+  
+  if(!is.null(unlink.path)){
+    print(paste0("Unlinking files in path: <Sample>/", unlink.path))
+    files.to.unlink <- sapply(strsplit(p.files, "/"), function(x) x[[2]])
+    sapply(files.to.unlink, function(ftu){
+      unlink(x = file.path(ftu, unlink.path), recursive = T)
+    })
+  }
+  p.files
 }
 
 
@@ -203,7 +212,8 @@ for(segmenter in c("ASCAT")){
   
   ## Select non-processed files
   RDS.files <- .removeRedundantFiles(pattern1="_processed.RDS$", 
-                                     pattern2=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"))
+                                     pattern2=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"),
+                                     unlink.path = file.path(toupper(segmenter), "L2R"))
   RDS.files <- .splitSamples(RDS.files, opt$idx, opt$grpsize)
   
   Segment.ff.Batch(RDS.file = RDS.files,  segmenter = segmenter, nthread=5)
@@ -215,7 +225,8 @@ for(segmenter in c("ASCAT")){
   ## CN Estimation:
   # Provides ASCN calls from ASCAT
   l2r.rds <- .removeRedundantFiles(pattern1=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"), 
-                                   pattern2="gammaEval.txt$")
+                                   pattern2="gammaEval.txt$",
+                                   unlink.path = file.path(toupper(segmenter), "ASCN"))
   l2r.rds <- .splitSamples(l2r.rds, opt$idx, opt$grpsize)
   print(l2r.rds)
   
