@@ -1383,10 +1383,10 @@ ASCN.ASCAT <- function(data = NULL, gammaRange = c(.35,.95),
       return(rep(NA, 8))
     }
     else {
-      
-      unlink(paste0(samplename, ".ASCATprofile.png"))
-      unlink(paste0(samplename, ".sunrise.png"))
-      
+      tmsg("Unlinking...")
+      try(unlink(paste0(samplename, ".ASCATprofile.png")))
+      try(unlink(paste0(samplename, ".sunrise.png")))
+      tmsg(paste0("Unlinked: ", getwd(), samplename))
       ## Correcting bugged ploidy in ASCAT
       # my.tcn <- my.ascat.seg.ascn$segments$nMajor + my.ascat.seg.ascn$segments$nMinor
       # median(my.tcn)
