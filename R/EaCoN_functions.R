@@ -1303,14 +1303,21 @@ Segment.ff.Batch <- function (RDS.files = list.files(path = getwd(), pattern = "
   message(paste0(" Found ", length(RDS.files), " files to process."))
   current.bitmapType <- getOption("bitmapType")
   if (length(RDS.files) < nthread) nthread <- length(RDS.files)
-  `%dopar%` <- foreach::"%dopar%"
-  cl <- parallel::makeCluster(spec = nthread, type = cluster.type, outfile = "")
-  doParallel::registerDoParallel(cl)
-  eacon.batchres <- foreach::foreach(r = seq_along(RDS.files), .inorder = TRUE, .errorhandling = "stop") %dopar% {
-    EaCoN.set.bitmapType(type = current.bitmapType)
-    Segment.ff(RDS.file = RDS.files[r], segmenter = segmenter, ...)
+  if(nthread > 1){
+    `%dopar%` <- foreach::"%dopar%"
+    cl <- parallel::makeCluster(spec = nthread, type = cluster.type, outfile = "")
+    doParallel::registerDoParallel(cl)
+    eacon.batchres <- foreach::foreach(r = seq_along(RDS.files), .inorder = TRUE, .errorhandling = "stop") %dopar% {
+      EaCoN.set.bitmapType(type = current.bitmapType)
+      Segment.ff(RDS.file = RDS.files[r], segmenter = segmenter, ...)
+    }
+    parallel::stopCluster(cl)
+  } else {
+    eacon.batchres <- lapply(seq_along(RDS.files), function(r){
+      Segment.ff(RDS.file = RDS.files[r], segmenter = segmenter, ...)
+    })
   }
-  parallel::stopCluster(cl)
+  
 }
 
 ## ASCAT Total and Allele-Specific Copy Number
@@ -2018,14 +2025,20 @@ ASCN.ff.Batch <- function(RDS.files = list.files(path = getwd(), pattern = "\\.S
   current.bitmapType <- getOption("bitmapType")
   if (length(RDS.files) < nthread) nthread <- length(RDS.files)
   `%dopar%` <- foreach::"%dopar%"
-  cl <- parallel::makeCluster(spec = nthread, type = cluster.type, outfile = "")
-  doParallel::registerDoParallel(cl)
-  r <- ""
-  eacon.batchres <- foreach::foreach(r = seq_along(RDS.files), .inorder = TRUE, .errorhandling = "stop") %dopar% {
-    EaCoN.set.bitmapType(type = current.bitmapType)
-    ASCN.ff(RDS.file = RDS.files[r], ...)
+  if(nthread > 1){
+    cl <- parallel::makeCluster(spec = nthread, type = cluster.type, outfile = "")
+    doParallel::registerDoParallel(cl)
+    r <- ""
+    eacon.batchres <- foreach::foreach(r = seq_along(RDS.files), .inorder = TRUE, .errorhandling = "stop") %dopar% {
+      EaCoN.set.bitmapType(type = current.bitmapType)
+      ASCN.ff(RDS.file = RDS.files[r], ...)
+    }
+    parallel::stopCluster(cl)
+  } else {
+    eacon.batchres <- lapply(seq_along(RDS.files), function(r){
+      ASCN.ff(RDS.file = RDS.files[r], ...)
+    })
   }
-  parallel::stopCluster(cl)
 }
 
 ## Generate the HTML report
@@ -2611,15 +2624,21 @@ Annotate.ff.Batch <- function(RDS.files = list.files(path = getwd(), pattern = "
   message(paste0(" Found ", length(RDS.files), " files to process."))
   current.bitmapType <- getOption("bitmapType")
   if (length(RDS.files) < nthread) nthread <- length(RDS.files)
-  `%dopar%` <- foreach::"%dopar%"
-  cl <- parallel::makeCluster(spec = nthread, type = cluster.type, outfile = "")
-  doParallel::registerDoParallel(cl)
-  s <- ""
-  targ.all <- foreach::foreach(s = 1:length(RDS.files), .inorder = FALSE, .errorhandling = "stop") %dopar% {
-    EaCoN.set.bitmapType(type = current.bitmapType)
-    Annotate.ff(RDS.file = RDS.files[s], ...)
+  if(nthread > 1){
+    `%dopar%` <- foreach::"%dopar%"
+    cl <- parallel::makeCluster(spec = nthread, type = cluster.type, outfile = "")
+    doParallel::registerDoParallel(cl)
+    s <- ""
+    targ.all <- foreach::foreach(s = 1:length(RDS.files), .inorder = FALSE, .errorhandling = "stop") %dopar% {
+      EaCoN.set.bitmapType(type = current.bitmapType)
+      Annotate.ff(RDS.file = RDS.files[s], ...)
+    }
+    parallel::stopCluster(cl)
+  } else {
+    targ.all <- lapply(seq_along(RDS.files), function(s){
+      Annotate.ff(RDS.file = RDS.files[s], ...)
+    })
   }
-  parallel::stopCluster(cl)
 }
 
 Annotate.solo <- function(cbs.file = NULL, genome = NULL, ldb = "/mnt/data_cigogne/bioinfo/") {
