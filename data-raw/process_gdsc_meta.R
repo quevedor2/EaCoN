@@ -28,6 +28,6 @@ na.idx <- which(as.logical(unable.idx + blank.idx))
 gdsc.meta$`Cancer Type (matching TCGA label)`[na.idx] <- NA
 
 
-save(gdsc.meta, file="GDSC_meta.rds")
+save(gdsc.meta, file="GDSC_meta.rda")
 write.table(gdsc.meta, file="GDSC_meta.tsv", sep="\t",
             col.names=T, row.names = F, quote = F)
