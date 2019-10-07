@@ -92,28 +92,12 @@ option_list <- list(
   make_option(c("-i", "--idx"), type="integer", default=NULL,
               help="Index of sample group [default= %default]", metavar="integer"),
   make_option(c("-g", "--grpsize"), type="integer", default=10,
-              help="Size of the groups to run in one job [default= %default]", metavar="integer"))
+              help="Size of the groups to run in one job [default= %default]", metavar="integer"),
+  make_option(c("-d", "--dataset"), type="character", default=NULL,
+              help="Dataset to use, either 'GDSC' or CCLE'"))
 opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
 
-segmenter <- 'ASCAT'
-dataset <- 'GDSC'
-pdir <- file.path('/mnt/work1/users/pughlab/projects', dataset)
-
-## Normalization
-# Outputs a ./YT_4941/YT_4941_GenomeWideSNP_6_hg19_processed.RDS file
-CEL.dir <- file.path(pdir, "data")
-sample.paths <- list.files(CEL.dir, pattern="CEL$", recursive = T, 
-                         ignore.case = T, full.names = T)
-sample.ids <- gsub(".cel", "", basename(sample.paths), ignore.case = TRUE)
-regm <- regexpr(".cel", basename(sample.paths), ignore.case=T)
-cel.suffix <- regmatches(x = basename(sample.paths), m = regm)
-
-
-
-
-dir.create(file.path(pdir, "eacon"), recursive = TRUE)
-setwd(file.path(pdir, "eacon"))
 
 .splitSamples <- function(sample.ids, range.idx, grp.size=10){
   if((grp.size * range.idx) > length(sample.ids)){
@@ -152,6 +136,28 @@ setwd(file.path(pdir, "eacon"))
   }
   p.files
 }
+
+
+
+segmenter <- 'ASCAT'
+dataset <- opt$dataset  #'GDSC'
+pdir <- file.path('/mnt/work1/users/pughlab/projects', dataset)
+
+## Normalization
+# Outputs a ./YT_4941/YT_4941_GenomeWideSNP_6_hg19_processed.RDS file
+CEL.dir <- file.path(pdir, "data")
+sample.paths <- list.files(CEL.dir, pattern="CEL$", recursive = T, 
+                         ignore.case = T, full.names = T)
+sample.ids <- gsub(".cel", "", basename(sample.paths), ignore.case = TRUE)
+regm <- regexpr(".cel", basename(sample.paths), ignore.case=T)
+cel.suffix <- regmatches(x = basename(sample.paths), m = regm)
+
+
+
+
+dir.create(file.path(pdir, "eacon"), recursive = TRUE)
+setwd(file.path(pdir, "eacon"))
+
 
 
 qsub.split <- TRUE
@@ -274,11 +280,11 @@ for(segmenter in c("ASCAT")){
     pancan.ploidy <- pancan.obj.segless$breaks$ploidy
     # plot(pancan.ploidy[,c('breaks', 'BRCA')], type='l')
     
-    max.process <- 3
+    max.process <- opt$grpsize # 15
     split.range <- seq(1, length(all.fits), by=max.process)
     split.range <- data.frame("start"=split.range,
                               "end"=c(split.range[-1]-1, length(all.fits)))
-    r <- apply(split.range[1:2,], 1, function(r){
+    r <- apply(split.range, 1, function(r){
       print(paste(r, collapse="-"))
       start_time <- Sys.time()
       
