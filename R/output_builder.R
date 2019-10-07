@@ -508,10 +508,14 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
 #########################################
 #### Building Expression Sets (ESet) ####
 .overlapMetaWithExprs <- function(exprs, meta=NULL, pre.regex="^", post.regex="[.cel]?"){
-  ## Identify which column contains the IDs that match the exprs matrix IDs
+  ## Identify which columns in the metadata contains the IDs that match the exprs matrix IDs
   if(!is.null(meta)){
+    #meta <- gdsc.meta
     meta.idx <- lapply(colnames(meta), function(col.id){
-      unlist(sapply(colnames(exprs), grep, x=paste0(pre.regex, meta[,col.id], post.regex), ignore.case=T))
+      match.idxs <- sapply(colnames(exprs), function(c.id){
+        grep(pattern = paste0(pre.regex, c.id, post.regex), x = meta[,col.id], ignore.case = T)
+      })
+      return(unlist(match.idxs))
     })
     idlen <- sapply(meta.idx, length)
     col.id.idx <- which.max(idlen)
@@ -524,6 +528,12 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
   if(idlen[col.id.idx] > 0){
     # If a column containing Sample IDs is found...
     tmsg(paste0("Building phenodata on ", idlen[col.id.idx], "/", ncol(exprs), " samples"))
+    if(idlen[col.id.idx] > ncol(exprs)){
+      multi.idx <- which(table(names(meta.idx[[col.id.idx]])) > 1)
+      stop(paste0("One or more sample(s) (", 
+                  paste(names(meta.idx[[col.id.idx]])[multi.idx], collapse=","),
+                  ") was/were mapped to multiple values in the metadata"))
+    }
     meta$phenodata.id <- NA
     meta$phenodata.id[meta.idx[[col.id.idx]]] <- colnames(exprs)
     
@@ -595,10 +605,12 @@ reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
 #' @examples 
 #'     buildPSetOut(gr.cnv, "CGP", pset.path, meta=cell.line.anno)
 buildPSetOut <- function(gr.cnv, anno.name, pset.path, 
-                         cols=c('seg.mean', 'nAraw', 'nBraw', 'nMinor', 'nMajor', 'TCN'), ...){
+                         cols=c('seg.mean', 'nAraw', 'nBraw', 'nMinor', 'nMajor', 'TCN'), 
+                         verbose=T, ...){
   dir.create(pset.path, recursive = T, showWarnings = F)
   
   #### Assemble assayData environment ####
+  if(verbose) print("Building assayData...")
   gene.mats <- reduceEsetMats(lapply(gr.cnv, function(x) x$genes), 
                               cols, keys='SYMBOL', features='SYMBOL', ord=TRUE)
   names(gene.mats) <- cols
@@ -609,8 +621,8 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
   names(bin.mats) <- cols
   bin.env <- .createEsetEnv(bin.mats, 'seg.mean')
   
-  
   #### Assemble featureData #### 
+  if(verbose) print("Assembling featureData...")
   bins.fdata <- AnnotatedDataFrame(data=as.data.frame(gr.cnv[[1]][['bins']])[,1:6],
                                    varMetadata=data.frame(labelDescription=c(
                                      "Chromosome", "Bin start", "Bin end", 
@@ -621,9 +633,14 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
                                     varMetadata=data.frame(labelDescription=c()))
   rownames(gene.fdata) <- rownames(gene.env$exprs)
   
+  
+  
   #### Assemble PhenoData ####
+  if(verbose) print("Assembling phenoData...")
+  # Use exprs(assayData)
   meta <- .overlapMetaWithExprs(exprs=gene.env$exprs, ...)
   cl.phenoData <- new("AnnotatedDataFrame", data=meta)
+  
   
   #### Assemble the eset #### 
   gene.eset <- ExpressionSet(assayData=gene.env,
