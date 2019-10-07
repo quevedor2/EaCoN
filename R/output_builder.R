@@ -656,7 +656,7 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
     if(file.exists(file.path(pset.path, paste0(anno.name, "_gene_ESet.RData")))){
       gene.eset <- .appendToPset(pset.path, paste0(anno.name, "_gene_ESet.RData"), gene.eset)
     }
-    if(file.path(pset.path, paste0(anno.name, "_bin_ESet.RData"))){
+    if(file.exists(file.path(pset.path, paste0(anno.name, "_bin_ESet.RData")))){
       bin.eset <- .appendToPset(pset.path, paste0(anno.name, "_bin_ESet.RData"), bin.eset)
     }
   }
@@ -698,11 +698,13 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
   } else if(any(dup.ids) & !overwrite){
     stop("Non-overwrite mode is not implemented yet")
   } else {
+    if(verbose) print("Updating phenoData...")
     phenoData(updated.pset) <- combine(phenoData(old.pset), phenoData(new.pset))
   }
   
   ## Updating assayData obj
   feature.df <- data.frame('features'=rownames(featureData(updated.pset)))
+  if(verbose) print("Updating assayData...")
   env.mat <- ls(assayData(old.pset))
   new.env <- lapply(env.mat, function(em, dup.ids){
     # Cycle through each assayData matrix and update to match
