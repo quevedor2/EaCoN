@@ -507,7 +507,7 @@ buildCbioOut <- function(gr.cnv, cbio.path="./out/cBio", pattern="_CNA",
 
 #########################################
 #### Building Expression Sets (ESet) ####
-.overlapMetaWithExprs <- function(exprs, meta=NULL, pre.regex="^", post.regex="[.cel]?"){
+.overlapMetaWithExprs <- function(exprs, meta=NULL, pre.regex="^", post.regex="(.cel)?$"){
   ## Identify which columns in the metadata contains the IDs that match the exprs matrix IDs
   if(!is.null(meta)){
     #meta <- gdsc.meta
@@ -606,7 +606,7 @@ reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
 #'     buildPSetOut(gr.cnv, "CGP", pset.path, meta=cell.line.anno)
 buildPSetOut <- function(gr.cnv, anno.name, pset.path, 
                          cols=c('seg.mean', 'nAraw', 'nBraw', 'nMinor', 'nMajor', 'TCN'), 
-                         verbose=T, ...){
+                         verbose=T, add.on.to.existing=T, ...){
   dir.create(pset.path, recursive = T, showWarnings = F)
   
   #### Assemble assayData environment ####
@@ -641,7 +641,6 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
   meta <- .overlapMetaWithExprs(exprs=gene.env$exprs, ...)
   cl.phenoData <- new("AnnotatedDataFrame", data=meta)
   
-  
   #### Assemble the eset #### 
   gene.eset <- ExpressionSet(assayData=gene.env,
                              phenoData=cl.phenoData,
@@ -651,14 +650,91 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
                              phenoData=cl.phenoData,
                              annotation=anno.name,
                              featureData=bins.fdata)
+  
+  #### Append on to existing ####
+  if(add.on.to.existing){
+    if(file.exists(file.path(pset.path, paste0(anno.name, "_gene_ESet.RData")))){
+      gene.eset <- .appendToPset(pset.path, paste0(anno.name, "_gene_ESet.RData"), gene.eset, ...)
+    }
+    if(file.path(pset.path, paste0(anno.name, "_bin_ESet.RData"))){
+      bin.eset <- .appendToPset(pset.path, paste0(anno.name, "_bin_ESet.RData"), bin.eset, ...)
+    }
+  }
+
+  
   save(gene.eset, file=file.path(pset.path, paste0(anno.name, "_gene_ESet.RData")))
   save(bin.eset, file=file.path(pset.path, paste0(anno.name, "_bin_ESet.RData")))
 }
 
 
+.appendToPset <- function(path.to, old.pset.f, new.pset, overwrite=T){
+  .load_obj <- function(f){
+    env <- new.env()
+    nm <- load(f, env)[1]
+    env[[nm]]
+  }
+  old.pset <- .load_obj(file.path(path.to, old.pset.f))
+  updated.pset <- old.pset
+    
+  #sampleNames(new.pset)[3] <- sampleNames(old.pset)[5]
+  dup.ids <- sampleNames(old.pset) %in% sampleNames(new.pset)
+  
+  ## Updating featureData obj
+  if(!all(rownames(fData(old.pset)) == rownames(fData(new.pset)))){
+    if(verbose) print("Updating featureData...")
+    featureData(updated.pset) <- combine(featureData(old.pset), featureData(new.pset))
+  } else {
+    if(verbose) print("Using existing featureData...")
+    featureData(updated.pset) <- featureData(old.pset)
+  }
+  
+  ## Updating phenoData obj
+  if(any(dup.ids) & overwrite){
+    ov.ids <- sampleNames(old.pset)[which(dup.ids)]
+    if(verbose) print(paste0("Removing duplicated sample: ", paste(ov.ids, collapse=",")))
+    
+    pd.tmp <- phenoData(old.pset)[-which(dup.ids),]
+    phenoData(updated.pset) <- combine(pd.tmp, phenoData(new.pset))
+  } else if(any(dup.ids) & !overwrite){
+    stop("Non-overwrite mode is not implemented yet")
+  } else {
+    phenoData(updated.pset) <- combine(phenoData(old.pset), phenoData(new.pset))
+  }
+  
+  ## Updating assayData obj
+  feature.df <- data.frame('features'=rownames(featureData(updated.pset)))
+  env.mat <- ls(assayData(old.pset))
+  new.env <- lapply(env.mat, function(em, dup.ids){
+    # Cycle through each assayData matrix and update to match
+    # the order of featureData and phenoData
+    if(any(dup.ids)){
+      old.mat <- as.data.frame(assayData(old.pset)[[em]][,-which(dup.ids)])
+    } else {
+      old.mat <- as.data.frame(assayData(old.pset)[[em]])
+    }
+    
+    new.mat <- as.data.frame(assayData(new.pset)[[em]])
+    updated.mat <- as.data.frame(assayData(updated.pset)[[em]])
+    
+    old.mat$features <- rownames(featureData(old.pset))
+    new.mat$features <- rownames(featureData(new.pset))
+    
+    upd.mat <- Reduce(function(x,y) merge(x,y,by.x='features', all.x=T), 
+                      list(feature.df, old.mat, new.mat))
+    rownames(upd.mat) <- upd.mat$features
+    if(all(colnames(upd.mat)[-1] == rownames(pData(updated.pset)))){
+      as.matrix(upd.mat[,-1])
+    } else {
+      stop("Colnames in assayData does not match the phenoData")
+    }
+  }, dup.ids=dup.ids)
+  names(new.env) <- env.mat
+  assayData(updated.pset) <- list2env(new.env)
+  
+  return(updated.pset)
+}
 
-
-
+#meta <- .overlapMetaWithExprs(exprs=gene.env$exprs, meta=meta)
 
 
 

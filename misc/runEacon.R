@@ -82,7 +82,7 @@ force = FALSE
 ##############
 #### Main ####
 
-#devtools::install_github("quevedor2/EaCoN", ref = 'gamma')
+#devtools::install_github("quevedor2/EaCoN", ref = 'tads')
 library(optparse)
 library(EaCoN)
 library(parallel)
@@ -96,6 +96,7 @@ option_list <- list(
 opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
 
+segmenter <- 'ASCAT'
 dataset <- 'GDSC'
 pdir <- file.path('/mnt/work1/users/pughlab/projects', dataset)
 
@@ -236,7 +237,6 @@ for(segmenter in c("ASCAT")){
 
 #### Output builder: ####
 for(segmenter in c("ASCAT")){
-  segmenter <- 'ASCAT'
   print(segmenter)
   if(toupper(segmenter)=='ASCAT'){
     
@@ -256,9 +256,19 @@ for(segmenter in c("ASCAT")){
     })
     names(all.fits) <- sapply(all.fits, function(x) x$sample)
     
-    data(CCLE_meta)
-    meta <- ccle.meta[,c('SNP arrays', 'tcga_code')]
-    colnames(meta) <- c('sample', 'TCGA_code')
+    meta.l <- switch(dataset,
+                     CCLE={
+                       data(CCLE_meta)
+                       meta <- ccle.meta[,c('SNP arrays', 'tcga_code')]
+                       colnames(meta) <- c('sample', 'TCGA_code')
+                       list('meta.tcga'=meta, 'meta'=ccle.meta)
+                     },
+                     GDSC={
+                       data(GDSC_meta)
+                       meta <- gdsc.meta[,c('Sample Name', 'Cancer Type (matching TCGA label)')]
+                       colnames(meta) <- c('sample', 'TCGA_code')
+                       list('meta.tcga'=meta, 'meta'=gdsc.meta)
+                     })
     
     data(pancanPloidy.noSegs)
     pancan.ploidy <- pancan.obj.segless$breaks$ploidy
@@ -268,19 +278,19 @@ for(segmenter in c("ASCAT")){
     split.range <- seq(1, length(all.fits), by=max.process)
     split.range <- data.frame("start"=split.range,
                               "end"=c(split.range[-1]-1, length(all.fits)))
-    r <- apply(split.range, 1, function(r){
+    r <- apply(split.range[1:2,], 1, function(r){
       print(paste(r, collapse="-"))
       
       gr.cnv <- annotateRDS.Batch(all.fits[r['start']:r['end']], 
                                   toupper(segmenter), nthread=3,
-                                  gamma.method='score', gamma.meta=meta,
+                                  gamma.method='score', gamma.meta=meta.l$meta.tcga,
                                   pancan.ploidy=pancan.ploidy)
       
       cbio.path=file.path("out", "cBio")
       buildCbioOut(gr.cnv, cbio.path="./out/cBio")
       
       pset.path=file.path("out", "PSet")
-      buildPSetOut(gr.cnv, "CGP", pset.path, meta=ccle.meta)
+      buildPSetOut(gr.cnv, dataset, pset.path, meta=meta.l$meta)
       gc()
       r
     })
