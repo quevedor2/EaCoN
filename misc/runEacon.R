@@ -274,12 +274,13 @@ for(segmenter in c("ASCAT")){
     pancan.ploidy <- pancan.obj.segless$breaks$ploidy
     # plot(pancan.ploidy[,c('breaks', 'BRCA')], type='l')
     
-    max.process <- 10
+    max.process <- 3
     split.range <- seq(1, length(all.fits), by=max.process)
     split.range <- data.frame("start"=split.range,
                               "end"=c(split.range[-1]-1, length(all.fits)))
     r <- apply(split.range[1:2,], 1, function(r){
       print(paste(r, collapse="-"))
+      start_time <- Sys.time()
       
       gr.cnv <- annotateRDS.Batch(all.fits[r['start']:r['end']], 
                                   toupper(segmenter), nthread=3,
@@ -291,6 +292,10 @@ for(segmenter in c("ASCAT")){
       
       pset.path=file.path("out", "PSet")
       buildPSetOut(gr.cnv, dataset, pset.path, meta=meta.l$meta)
+      end_time <- Sys.time()
+      t1 <- end_time - start_time
+      print(paste0("Time to create jaccard matrix: ", round(t1,2), "s"))
+      
       gc()
       r
     })

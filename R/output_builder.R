@@ -654,10 +654,10 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
   #### Append on to existing ####
   if(add.on.to.existing){
     if(file.exists(file.path(pset.path, paste0(anno.name, "_gene_ESet.RData")))){
-      gene.eset <- .appendToPset(pset.path, paste0(anno.name, "_gene_ESet.RData"), gene.eset, ...)
+      gene.eset <- .appendToPset(pset.path, paste0(anno.name, "_gene_ESet.RData"), gene.eset)
     }
     if(file.path(pset.path, paste0(anno.name, "_bin_ESet.RData"))){
-      bin.eset <- .appendToPset(pset.path, paste0(anno.name, "_bin_ESet.RData"), bin.eset, ...)
+      bin.eset <- .appendToPset(pset.path, paste0(anno.name, "_bin_ESet.RData"), bin.eset)
     }
   }
 
