@@ -667,7 +667,7 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
 }
 
 
-.appendToPset <- function(path.to, old.pset.f, new.pset, overwrite=T){
+.appendToPset <- function(path.to, old.pset.f, new.pset, overwrite=T, verbose=T){
   .load_obj <- function(f){
     env <- new.env()
     nm <- load(f, env)[1]
