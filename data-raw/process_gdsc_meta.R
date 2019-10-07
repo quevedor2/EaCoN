@@ -18,4 +18,16 @@ cel.suffix <- regmatches(x = basename(sample.paths), m = regm)
 cel.files <- paste0(sample.ids, cel.suffix)
 
 anno.df <- data.frame("sample"=sample.ids, "cel"=cel.files)
-merge(gdsc.df, anno.df, by.x='Sample Name', by.y='sample', all.y=T)
+anno.df$sample <- gsub("ega-box-03_", "", anno.df$sample)
+gdsc.meta <- merge(gdsc.df, anno.df, by.x='Sample Name', by.y='sample', all.y=T)
+
+## Clean up TCGA labels
+unable.idx <- gdsc.meta$`Cancer Type (matching TCGA label)` == 'UNABLE TO CLASSIFY'
+blank.idx <- gdsc.meta$`Cancer Type (matching TCGA label)` == ''
+na.idx <- which(as.logical(unable.idx + blank.idx))
+gdsc.meta$`Cancer Type (matching TCGA label)`[na.idx] <- NA
+
+
+save(gdsc.meta, file="GDSC_meta.rds")
+write.table(gdsc.meta, file="GDSC_meta.tsv", sep="\t",
+            col.names=T, row.names = F, quote = F)

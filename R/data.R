@@ -57,3 +57,22 @@
 #' @examples
 #' data(CCLE_meta)
 "ccle.meta"
+
+#' GDSC Metadata
+#'
+#' @docType data
+#'
+#' @usage data(GDSC_meta)
+#'
+#' @format A dataframe containing GDSC metadata:
+#' 
+#' @keywords datasets
+#'
+#' @source \href{https://www.cancerrxgene.org/downloads/bulk_download}{GDSC metadata}
+#' All cell lines screened 	Cell-line-annotation
+#' Cell_Lines_Details.xlsx
+#' GDSC_Cell_Lines_Details.csv
+#' 
+#' @examples
+#' data(GDSC_meta)
+"gdsc.meta"
