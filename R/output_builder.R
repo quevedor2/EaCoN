@@ -669,7 +669,7 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
       if(length(str.spl) == 0){
         out.idx <- 1
       } else {
-        old.idx <- max(as.integer(as.character(sapply(str.spl, function(i) i[2])))
+        old.idx <- max(as.integer(as.character(sapply(str.spl, function(i) i[2]))))
         out.idx <- old.idx + 1
       }
     }
