@@ -669,10 +669,11 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
       if(length(str.spl) == 0){
         out.idx <- 1
       } else {
-        old.idx <- as.integer(as.character(str.spl[[length(str.spl)]][2]))
+        old.idx <- max(as.integer(as.character(sapply(str.spl, function(i) i[2])))
         out.idx <- old.idx + 1
       }
     }
+    if(is.na(out.idx)) out.idx <- 1
     save(gene.eset, file=file.path(pset.path, paste0(anno.name, "_gene_ESet.", out.idx, ".RData")))
     save(bin.eset, file=file.path(pset.path, paste0(anno.name, "_bin_ESet.", out.idx, ".RData")))
   }
