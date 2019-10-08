@@ -115,5 +115,5 @@
 #' And condensed into a signal data structure using the collapsedTad.R script
 #' 
 #' @examples
-#' data(GDSC_meta)
+#' data(consensusTAD)
 "tad.gr"

@@ -174,7 +174,7 @@ genWindowedBed <- function(bin.size=1000000, seq.style="UCSC"){
   gr
 }
 
-segmentCNVs <- function(cnv, bed, reduce='mean'){
+segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin'){
   olaps = findOverlaps(cnv, bed)
   
   # Flag BED bins that map to multiple CNVs
@@ -187,27 +187,29 @@ segmentCNVs <- function(cnv, bed, reduce='mean'){
   dup.df <- as.data.frame(olaps[dup.idx,])
   dup.spl <- split(dup.df, dup.df$subjectHits)
   dup.em <- lapply(dup.spl, function(i) {
-    em.mat <- as.matrix(elementMetadata(cnv[i$queryHits,]))
+    em.mat <- as.matrix(mcols(cnv[i$queryHits,]))
+    storage.mode(em.mat) <- "numeric"
     switch(reduce,
            mean=colMeans(em.mat),
-           min=do.call(pmin, lapply(1:nrow(em.mat), function(i) em.mat[i,])),
-           max=do.call(pmax, lapply(1:nrow(em.mat), function(i) em.mat[i,])),
-           median=do.call(median, lapply(1:nrow(em.mat), function(i) em.mat[i,])))
+           min=do.call(pmin, lapply(1:nrow(em.mat), function(j) em.mat[j,])),
+           max=do.call(pmax, lapply(1:nrow(em.mat), function(j) em.mat[j,])),
+           median=apply(em.mat, 2, median))
     
   })
-  dup.em <- do.call(rbind, dup.em)
+  dup.em <- as.data.frame(do.call(rbind, dup.em))
+  dup.em$sample <- unique(cnv$sample)
   
   # Initialize a metadata matrix and populate it for the BED GRanges object
   em  <- matrix(nrow=length(bed), 
                 ncol=ncol(elementMetadata(cnv)), 
                 dimnames = list(NULL,colnames(elementMetadata(cnv))))
   dedup.olaps <- olaps[-dup.idx,]
-  em[subjectHits(dedup.olaps),] <- as.matrix(elementMetadata(cnv)[queryHits(dedup.olaps),])
-  em[unique(subjectHits(olaps)[dup.idx]),] <- dup.em 
+  em <- as.data.frame(em)
+  em[subjectHits(dedup.olaps),] <- as.data.frame(mcols(cnv)[queryHits(dedup.olaps),])
+  em[unique(subjectHits(olaps)[dup.idx]),] <- dup.em
   
   # Append metadata and return
-  em <- as.data.frame(em)
-  bed$ID <- em$ID <- paste0("bin_", c(1:nrow(em)))
+  bed$ID <- em$ID <- paste0(feature.id, "_", c(1:nrow(em)))
   
   return(list(seg=bed, genes=em))
 }
@@ -268,7 +270,7 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
 #' @examples
 #'  annotateRDS(fit.val.df, 'SampleX', 'ASCAT', build='hg19', bin.size=50000)
 annotateRDS <- function(fit.val, sample, segmenter, build='hg19', 
-                        bin.size=50000, ...){
+                        bin.size=50000, feature.set=c('bins'), ...){
   ## Assemble the ASCAT Seg file into a CNV GRanges object
   # gamma <- ASCAT.selectBestFit(fit.val, sample=sample, gamma.method='score',
   #                              gamma.meta=meta, pancan.ploidy=pancan.ploidy)
@@ -283,9 +285,6 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
 
   ## Annotate the CNVs based on:
   cl.anno <- list()
-  # Bins
-  windowed.bed <- genWindowedBed(bin.size=bin.size)
-  cl.anno[['bins']] <- segmentCNVs(cnv, windowed.bed, reduce='min')
   
   # Genes
   cols <- c('nMajor', 'nMinor', 'nAraw', 'nBraw', 'TCN', 'seg.mean')
@@ -295,6 +294,28 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   
   # Raw seg
   cl.anno[['seg']] <- as.data.frame(cnv)
+  
+  feature.anno <- lapply(feature.set, function(fset){
+    switch(fset,
+           bins={
+             tmsg("Assembling 'Bin' features...")
+             windowed.bed <- genWindowedBed(bin.size=bin.size)
+             segmentCNVs(cnv, windowed.bed, reduce='median', feature.id = fset)
+           },
+           tads={
+             tmsg("Assembling 'TAD' features...")
+             data(consensusTAD)
+             segmentCNVs(cnv, tad.gr, reduce='median', feature.id = fset)
+           },
+           cres={
+             tmsg("Assembling 'CRE' features...")
+             data(geneCRE)
+             segmentCNVs(cnv, cre.gr, reduce='median', feature.id = fset)
+           })
+  })
+  names(feature.anno) <- feature.set
+  
+  cl.anno <- append(cl.anno, feature.anno)
   
   return(cl.anno)
 }
