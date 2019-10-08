@@ -662,18 +662,7 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
     save(gene.eset, file=file.path(pset.path, paste0(anno.name, "_gene_ESet.RData")))
     save(bin.eset, file=file.path(pset.path, paste0(anno.name, "_bin_ESet.RData")))
   } else {
-    if(is.null(out.idx)){
-      existing.files <- list.files(pset.path, pattern="RData$")
-      str.spl <- strsplit(existing.files[1], split = "\\.")
-      
-      if(length(str.spl) == 0){
-        out.idx <- 1
-      } else {
-        old.idx <- max(as.integer(as.character(sapply(str.spl, function(i) i[2]))))
-        out.idx <- old.idx + 1
-      }
-    }
-    if(is.na(out.idx)) out.idx <- 1
+    if(length(out.idx) > 1) out.idx <- paste(out.idx, collapse="-")
     save(gene.eset, file=file.path(pset.path, paste0(anno.name, "_gene_ESet.", out.idx, ".RData")))
     save(bin.eset, file=file.path(pset.path, paste0(anno.name, "_bin_ESet.", out.idx, ".RData")))
   }

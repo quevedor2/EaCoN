@@ -291,7 +291,8 @@ for(segmenter in c("ASCAT")){
       gr.cnv <- annotateRDS.Batch(all.fits[r['start']:r['end']], 
                                   toupper(segmenter), nthread=3,
                                   gamma.method='score', gamma.meta=meta.l$meta.tcga,
-                                  pancan.ploidy=pancan.ploidy)
+                                  pancan.ploidy=pancan.ploidy,
+                                  out.idx=c(r['start'], r['end']))
       
       cbio.path=file.path("out", "cBio")
       buildCbioOut(gr.cnv, cbio.path="./out/cBio")
