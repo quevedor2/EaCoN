@@ -76,3 +76,44 @@
 #' @examples
 #' data(GDSC_meta)
 "gdsc.meta"
+
+#' Consensus TAD GenomicRanges
+#'
+#' @docType data
+#'
+#' @usage data(consensusTAD)
+#'
+#' @format A GenomicRanges object containing condensed TADs and their jaccard index cutoff
+#' 
+#' @keywords datasets
+#'
+#' @source \href{https://www.encodeproject.org/metadata/type%3DExperiment%26files.output_type%3Dnested%2Btopologically%2Bassociated%2Bdomains%26files.output_type%3Dtopologically%2Bassociated%2Bdomains%26files.file_type%3Dbed%2Bbed3%252B%26files.assembly%3Dhg19/metadata.tsv}{ENCODE data}
+#' https://www.encodeproject.org/metadata/type%3DExperiment%26files.output_type%3Dnested%2Btopologically%2Bassociated%2Bdomains%26files.output_type%3Dtopologically%2Bassociated%2Bdomains%26files.file_type%3Dbed%2Bbed3%252B%26files.assembly%3Dhg19/metadata.tsv -X GET -H "Accept: text/tsv" -H "Content-Type: application/json" --data '{"elements": ["/experiments/ENCSR549MGQ/","/experiments/ENCSR312KHQ/","/experiments/ENCSR440CTR/","/experiments/ENCSR834DXR/","/experiments/ENCSR401TBQ/","/experiments/ENCSR862OGI/","/experiments/ENCSR489OCU/","/experiments/ENCSR998ZSP/","/experiments/ENCSR346DCU/","/experiments/ENCSR444WCZ/","/experiments/ENCSR213DHH/","/experiments/ENCSR343VKT/"]}'
+#' https://www.encodeproject.org/files/ENCFF066NYU/@@download/ENCFF066NYU.bed.gz
+#' https://www.encodeproject.org/files/ENCFF784LMI/@@download/ENCFF784LMI.bed.gz
+#' https://www.encodeproject.org/files/ENCFF075QYD/@@download/ENCFF075QYD.bed.gz
+#' https://www.encodeproject.org/files/ENCFF437EBV/@@download/ENCFF437EBV.bed.gz
+#' https://www.encodeproject.org/files/ENCFF996RJN/@@download/ENCFF996RJN.bed.gz
+#' https://www.encodeproject.org/files/ENCFF701HCM/@@download/ENCFF701HCM.bed.gz
+#' https://www.encodeproject.org/files/ENCFF136AUY/@@download/ENCFF136AUY.bed.gz
+#' https://www.encodeproject.org/files/ENCFF310FEU/@@download/ENCFF310FEU.bed.gz
+#' https://www.encodeproject.org/files/ENCFF588KUZ/@@download/ENCFF588KUZ.bed.gz
+#' https://www.encodeproject.org/files/ENCFF274VJU/@@download/ENCFF274VJU.bed.gz
+#' https://www.encodeproject.org/files/ENCFF471EYL/@@download/ENCFF471EYL.bed.gz
+#' https://www.encodeproject.org/files/ENCFF768YZZ/@@download/ENCFF768YZZ.bed.gz
+#' https://www.encodeproject.org/files/ENCFF931RKD/@@download/ENCFF931RKD.bed.gz
+#' https://www.encodeproject.org/files/ENCFF531PAV/@@download/ENCFF531PAV.bed.gz
+#' https://www.encodeproject.org/files/ENCFF654GDV/@@download/ENCFF654GDV.bed.gz
+#' https://www.encodeproject.org/files/ENCFF451MCF/@@download/ENCFF451MCF.bed.gz
+#' https://www.encodeproject.org/files/ENCFF938WXQ/@@download/ENCFF938WXQ.bed.gz
+#' https://www.encodeproject.org/files/ENCFF676WJO/@@download/ENCFF676WJO.bed.gz
+#' https://www.encodeproject.org/files/ENCFF336WPU/@@download/ENCFF336WPU.bed.gz
+#' https://www.encodeproject.org/files/ENCFF248DGB/@@download/ENCFF248DGB.bed.gz
+#' https://www.encodeproject.org/files/ENCFF477VVJ/@@download/ENCFF477VVJ.bed.gz
+#' https://www.encodeproject.org/files/ENCFF569KNS/@@download/ENCFF569KNS.bed.gz
+#' Dataset was created using the createReferenceTad.R script
+#' And condensed into a signal data structure using the collapsedTad.R script
+#' 
+#' @examples
+#' data(GDSC_meta)
+"tad.gr"
