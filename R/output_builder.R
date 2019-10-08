@@ -606,7 +606,7 @@ reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
 #'     buildPSetOut(gr.cnv, "CGP", pset.path, meta=cell.line.anno)
 buildPSetOut <- function(gr.cnv, anno.name, pset.path, 
                          cols=c('seg.mean', 'nAraw', 'nBraw', 'nMinor', 'nMajor', 'TCN'), 
-                         verbose=T, add.on.to.existing=T, ...){
+                         verbose=T, add.on.to.existing=F, out.idx=NULL, ...){
   dir.create(pset.path, recursive = T, showWarnings = F)
   
   #### Assemble assayData environment ####
@@ -659,11 +659,23 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
     if(file.exists(file.path(pset.path, paste0(anno.name, "_bin_ESet.RData")))){
       bin.eset <- .appendToPset(pset.path, paste0(anno.name, "_bin_ESet.RData"), bin.eset)
     }
+    save(gene.eset, file=file.path(pset.path, paste0(anno.name, "_gene_ESet.RData")))
+    save(bin.eset, file=file.path(pset.path, paste0(anno.name, "_bin_ESet.RData")))
+  } else {
+    if(is.null(out.idx)){
+      existing.files <- list.files(pset.path, pattern="RData$")
+      str.spl <- strsplit(existing.files[1], split = "\\.")
+      
+      if(length(str.spl) == 0){
+        out.idx <- 1
+      } else {
+        old.idx <- as.integer(as.character(str.spl[[1]][2]))
+        out.idx <- old.idx + 1
+      }
+    }
+    save(gene.eset, file=file.path(pset.path, paste0(anno.name, "_gene_ESet.", out.idx, ".RData")))
+    save(bin.eset, file=file.path(pset.path, paste0(anno.name, "_bin_ESet.", out.idx, ".RData")))
   }
-
-  
-  save(gene.eset, file=file.path(pset.path, paste0(anno.name, "_gene_ESet.RData")))
-  save(bin.eset, file=file.path(pset.path, paste0(anno.name, "_bin_ESet.RData")))
 }
 
 
