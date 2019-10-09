@@ -141,7 +141,7 @@ opt <- parse_args(opt_parser)
 
 segmenter <- 'ASCAT'
 dataset <- opt$dataset  #'GDSC'
-pdir <- file.path('/mnt/work1/users/pughlab/projects', dataset)
+pdir <- file.path('/mnt/work1/users/pughlab/projects/cancer_cell_lines', dataset)
 
 ## Normalization
 # Outputs a ./YT_4941/YT_4941_GenomeWideSNP_6_hg19_processed.RDS file
@@ -291,14 +291,18 @@ for(segmenter in c("ASCAT")){
       gr.cnv <- annotateRDS.Batch(all.fits[r['start']:r['end']], 
                                   toupper(segmenter), nthread=3,
                                   gamma.method='score', gamma.meta=meta.l$meta.tcga,
-                                  pancan.ploidy=pancan.ploidy,
-                                  out.idx=c(r['start'], r['end']))
+                                  pancan.ploidy=pancan.ploidy, feature.set=c('bins', 'tads'))
       
       cbio.path=file.path("out", "cBio")
       buildCbioOut(gr.cnv, cbio.path="./out/cBio")
       
+      ## Build standard bin and gene PSets
       pset.path=file.path("out", "PSet")
-      buildPSetOut(gr.cnv, dataset, pset.path, meta=meta.l$meta)
+      buildPSetOut(gr.cnv, dataset, pset.path, meta=meta.l$meta, out.idx=c(r['start'], r['end']))
+      
+      ## Build TAD and CRE PSets
+      pset.path=file.path("out", "PSet")
+      buildPSetOut(gr.cnv, dataset, pset.path, meta=meta.l$meta, out.idx=c(r['start'], r['end']))
       end_time <- Sys.time()
       t1 <- end_time - start_time
       print(paste0("Time to create jaccard matrix: ", round(t1,2), "s"))
