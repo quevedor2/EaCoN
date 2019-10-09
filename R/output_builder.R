@@ -686,7 +686,7 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
   #### output segmented data ####
   if(length(out.idx) > 1) out.idx <- paste(out.idx, collapse="-")
   save(gene.eset, file=file.path(pset.path, paste0(anno.name, "_gene_ESet.", out.idx, ".RData")))
-  sapply(feature.sets, function(f)){
+  sapply(feature.sets, function(f){
     out.eset <- f.esets[[f]]
     save(out.eset, file=file.path(pset.path, paste0(anno.name, "_", f, 
                                                     "_ESet.", out.idx, ".RData")))
