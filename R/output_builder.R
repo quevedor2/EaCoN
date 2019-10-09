@@ -688,10 +688,10 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
   save(gene.eset, file=file.path(pset.path, paste0(anno.name, "_gene_ESet.", out.idx, ".RData")))
   sapply(feature.sets, function(f)){
     out.eset <- f.esets[[f]]
-    save(bin.eset, file=file.path(pset.path, paste0(anno.name, "_", f, "_ESet.", out.idx, ".RData")))
-  }
+    save(out.eset, file=file.path(pset.path, paste0(anno.name, "_", f, 
+                                                    "_ESet.", out.idx, ".RData")))
+  })
 }
-
 
 
 

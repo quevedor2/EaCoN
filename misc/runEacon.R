@@ -300,9 +300,6 @@ for(segmenter in c("ASCAT")){
       pset.path=file.path("out", "PSet")
       buildPSetOut(gr.cnv, dataset, pset.path, meta=meta.l$meta, out.idx=c(r['start'], r['end']))
       
-      ## Build TAD and CRE PSets
-      pset.path=file.path("out", "PSet")
-      buildPSetOut(gr.cnv, dataset, pset.path, meta=meta.l$meta, out.idx=c(r['start'], r['end']))
       end_time <- Sys.time()
       t1 <- end_time - start_time
       print(paste0("Time to create jaccard matrix: ", round(t1,2), "s"))
