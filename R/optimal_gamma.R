@@ -31,6 +31,66 @@ loadBestFitRDS <- function(gamma, segmenter, sample){
   return(rds)
 }
 
+.removeProblematic <- function(pd.anno){
+  fail.idx <- grep("failed", pd.anno$`cancer type`)
+  blank.idx <- grep("^$", pd.anno$`cancer type`, perl=TRUE)
+  dnu.idx <- grep("True", pd.anno$`Do_not_use`, perl=TRUE)
+  dnu.blank.idx <- grep("^$", pd.anno$`Do_not_use`, perl=TRUE)
+  
+  return(pd.anno[-c(fail.idx, blank.idx,
+                    dnu.idx, dnu.blank.idx),])
+}
+
+.checkAndDownloadFile <- function(pattern, download){
+  f <- list.files(pattern=pattern)
+  if(length(f) == 0 & download){
+    file.id <- gsub("\\..*", "", pattern)
+    url <- switch(file.id,
+                  whitelisted='http://api.gdc.cancer.gov/data/4f277128-f793-4354-a13d-30cc7fe9f6b5',
+                  annotations='http://api.gdc.cancer.gov/data/1a7d7be8-675d-4e60-a105-19d4121bdebf',
+                  JSedit='http://api.gdc.cancer.gov/data/4f277128-f793-4354-a13d-30cc7fe9f6b5',
+                  abs_segtabs='http://api.gdc.cancer.gov/data/0f4f5701-7b61-41ae-bda9-2805d1ca9781')
+    #download.file(url, destfile = ".", method = 'curl')
+    #f <- list.files(pattern=pattern)
+  } else if(length(f) == 0 & !download) {
+    stop("download argument is set to FALSE, please go manually download the data at https://gdc.cancer.gov/about-data/publications/pancanatlas")
+  }
+  f
+}
+
+.reduceId <- function(sample.ids){
+  ap.ids <- sapply(strsplit(sample.ids, "-"), function(i) paste(i[1:4], collapse="-"))
+  gsub("[a-z]$", "", ap.ids, ignore.case = T)
+}
+
+.overlapSegWithAnno <- function(pd.seg, anno, reduce.ids=FALSE){
+  seg <- split(pd.seg, f=pd.seg$Sample)
+  if(reduce.ids){
+    ap.ids <- .reduceId(anno$sample)
+  } else {
+    ap.ids <- anno$sample
+  }
+  seg <- seg[match(ap.ids, names(seg))]
+  na.idx <- which(is.na(names(seg)))
+  return(list("seg"=seg, "na.idx"=na.idx))
+}
+
+.getHistCounts <- function(ctp0, col.of.interest){
+  tcga.code <- unique(ctp0$`cancer type`)
+  coi.list <- lapply(col.of.interest, function(coi){
+    breaks <- switch(coi,
+                     ploidy=seq(0.05, 10.05, by=0.1),
+                     seq(-0.005, 1.005, by=0.01))
+    gap <- diff(breaks)[1] / 2
+    coi.breaks <- hist(ctp0[,coi], breaks=breaks, plot = F)
+    data.frame("breaks"= coi.breaks$breaks[-length(coi.breaks$breaks)] + gap,
+               "P"=round(coi.breaks$counts / sum(coi.breaks$counts),3))
+  })
+  names(coi.list) <- col.of.interest
+  coi.list
+}
+
+
 createPancanSegRef <- function(ref.dir=NULL, out.dir=NULL, verbose=T, 
                                write.seg=FALSE, download.files=FALSE){
   if(is.null(ref.dir)){
@@ -40,37 +100,18 @@ createPancanSegRef <- function(ref.dir=NULL, out.dir=NULL, verbose=T,
   setwd(ref.dir)
   
   ## Check if files exist:
-  .checkAndDownloadFile <- function(pattern, download){
-    f <- list.files(pattern=pattern)
-    if(length(f) == 0 & download){
-      file.id <- gsub("\\..*", "", pattern)
-      url <- switch(file.id,
-                    whitelisted='http://api.gdc.cancer.gov/data/4f277128-f793-4354-a13d-30cc7fe9f6b5',
-                    annotations='http://api.gdc.cancer.gov/data/1a7d7be8-675d-4e60-a105-19d4121bdebf',
-                    JSedit='http://api.gdc.cancer.gov/data/4f277128-f793-4354-a13d-30cc7fe9f6b5')
-      #download.file(url, destfile = ".", method = 'curl')
-      #f <- list.files(pattern=pattern)
-    } else if(length(f) == 0 & !download) {
-      stop("download argument is set to FALSE, please go manually download the data at https://gdc.cancer.gov/about-data/publications/pancanatlas")
-    }
-    f
-  }
-  seg.f <- .checkAndDownloadFile(pattern="whitelisted.seg$", download=download)
-  anno.f <- .checkAndDownloadFile(pattern="annotations.tsv$", download=download)
-  ploidy.f <- .checkAndDownloadFile(pattern="JSedit.fixed.txt$", download=download)
-  pancan.files <- list("seg"=seg.f, "anno"=anno.f, "ploidy"=ploidy.f)
+  seg.f <- .checkAndDownloadFile(pattern="whitelisted.seg$", download=download.files)
+  anno.f <- .checkAndDownloadFile(pattern="annotations.tsv$", download=download.files)
+  abs.f <- .checkAndDownloadFile(pattern="abs_segtabs.fixed.txt$", download=download.files)
+  ploidy.f <- .checkAndDownloadFile(pattern="JSedit.fixed.txt$", download=download.files)
+  pancan.files <- list("seg"=seg.f, "anno"=anno.f, "ploidy"=ploidy.f, "abs"=abs.f)
   
   pancan.data <- lapply(pancan.files, read.table, sep="\t", header=T, 
                         stringsAsFactors = F, check.names = F, fill=T,
                         quote='', comment.char='')
   
   ## Remove problematic samples
-  fail.idx <- grep("failed", pancan.data[['anno']]$`cancer type`)
-  blank.idx <- grep("^$", pancan.data[['anno']]$`cancer type`, perl=TRUE)
-  dnu.idx <- grep("True", pancan.data[['anno']]$`Do_not_use`, perl=TRUE)
-  dnu.blank.idx <- grep("^$", pancan.data[['anno']]$`Do_not_use`, perl=TRUE)
-  pancan.data[['anno']] <- pancan.data[['anno']][-c(fail.idx, blank.idx,
-                                                    dnu.idx, dnu.blank.idx),]
+  pancan.data[['anno']] <- .removeProblematic(pancan.data[['anno']])
   
   ## Remove samples with no ploidy call
   blank.idx <- grep("^$", pancan.data[['ploidy']]$`call status`)
@@ -81,11 +122,24 @@ createPancanSegRef <- function(ref.dir=NULL, out.dir=NULL, verbose=T,
                         pancan.data[c('ploidy', 'anno')])
   
   ## Identify the .Seg data for Annotated-ploidy samples 
-  seg <- split(pancan.data[['seg']], f=pancan.data[['seg']]$Sample)
-  seg <- seg[match(anno.ploidy$sample, names(seg))]
-  na.idx <- which(is.na(names(seg)))
-  seg <- seg[-na.idx]
-  anno.ploidy.seg <- anno.ploidy[-na.idx,]
+  seg.anno <- .overlapSegWithAnno(pancan.data[['seg']], anno.ploidy)
+  seg <- seg.anno$seg
+  if(length(seg.anno$na.idx) > 0){
+    seg <- seg[-seg.anno$na.idx]
+    anno.ploidy.seg <- anno.ploidy[-seg.anno$na.idx,]
+  } else {
+    anno.ploidy.seg <- anno.ploidy
+  }
+  
+  ## Identify the ABSOLUTE data for Annotated-ploidy samples 
+  abs.anno <- .overlapSegWithAnno(pancan.data[['abs']], anno.ploidy.seg, reduce.ids=TRUE)
+  abs <- abs.anno$seg
+  if(length(abs.anno$na.idx) > 0){
+    abs <- abs[-abs.anno$na.idx]
+    anno.ploidy.seg.abs <- anno.ploidy.seg[-abs.anno$na.idx]
+  } else {
+    anno.ploidy.seg.abs <- anno.ploidy.seg
+  }
   
   if(verbose){
     ap.cnt <- nrow(anno.ploidy)
@@ -107,20 +161,8 @@ createPancanSegRef <- function(ref.dir=NULL, out.dir=NULL, verbose=T,
   cancer.type.ploidy <- split(anno.ploidy.seg, f=anno.ploidy.seg$`cancer type`)
   col.of.interest <- c('purity', 'ploidy', 'Cancer DNA fraction', 'Subclonal genome fraction')
   ## Get the counts per breakpoint
-  ctp.breaks <- lapply(cancer.type.ploidy, function(ctp0){
-    tcga.code <- unique(ctp0$`cancer type`)
-    coi.list <- lapply(col.of.interest, function(coi){
-      breaks <- switch(coi,
-                       ploidy=seq(0.05, 10.05, by=0.1),
-                       seq(-0.005, 1.005, by=0.01))
-      gap <- diff(breaks)[1] / 2
-      coi.breaks <- hist(ctp0[,coi], breaks=breaks, plot = F)
-      data.frame("breaks"= coi.breaks$breaks[-length(coi.breaks$breaks)] + gap,
-                 "P"=round(coi.breaks$counts / sum(coi.breaks$counts),3))
-    })
-    names(coi.list) <- col.of.interest
-    coi.list
-  })
+  ctp.breaks <- lapply(cancer.type.ploidy, .getHistCounts, col.of.interest=col.of.interest)
+  
   ## Reduce into a single matrix
   ctp.break.mats <- lapply(col.of.interest, function(coi){
     coi.mat <- Reduce(function(x,y) merge(x,y,by='breaks'),
@@ -137,6 +179,7 @@ createPancanSegRef <- function(ref.dir=NULL, out.dir=NULL, verbose=T,
   pancan.obj <- list('AP-meta'=anno.ploidy,
                      'APS-meta'=anno.ploidy.seg,
                      'seg'=seg,
+                     'abs'=abs,
                      'breaks'=ctp.break.mats)
   
   ## Output stuff
@@ -147,16 +190,21 @@ createPancanSegRef <- function(ref.dir=NULL, out.dir=NULL, verbose=T,
     dir.create(path = out.dir, recursive = T)
     warning(paste("Outputing to directory: ", out.dir))
   }
-  pancan.obj.segless <- pancan.obj[-grep("seg", names(pancan.obj))]
+  pancan.obj.segless <- pancan.obj[-grep("seg|abs", names(pancan.obj))]
   save(pancan.obj.segless, file=file.path(out.dir, "pancanPloidy.noSegs.rda"))
   save(pancan.obj, file=file.path(out.dir, "pancanPloidy.rda"))
   #saveRDS(pancan.obj, file = file.path(out.dir, "pancanPloidy.RDS"))
   
   ## Writes cancer-specific seg files
   if(write.seg & !is.null(out.dir)){
-    aps.cancer.type <- split(anno.ploidy.seg, f=anno.ploidy.seg$`cancer type`)
+    aps.cancer.type <- split(anno.ploidy.seg.abs, f=anno.ploidy.seg.abs$`cancer type`)
     
     sapply(names(aps.cancer.type), function(cancer.type){
+      cancer.abs <- abs[.reduceId(aps.cancer.type[[cancer.type]]$sample)]
+      cancer.abs <- do.call(rbind, cancer.abs)
+      write.table(cancer.abs, file=file.path(out.dir, paste0(cancer.type, "_pancan.abs_segtab.tsv")),
+                  col.names=T, row.names=F, quote = F, sep = '\t')
+      
       cancer.seg <- seg[aps.cancer.type[[cancer.type]]$sample]
       cancer.seg <- do.call(rbind, cancer.seg)
       write.table(cancer.seg, file=file.path(out.dir, paste0(cancer.type, "_pancan.seg")),
