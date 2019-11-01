@@ -93,13 +93,15 @@ loadBestFitRDS <- function(gamma, segmenter, sample){
 
 createPancanSegRef <- function(ref.dir=NULL, out.dir=NULL, verbose=T, 
                                write.seg=FALSE, download.files=FALSE){
+  ### TEMP: Need to point ref.dir to the git directory, not the R package dir
   if(is.null(ref.dir)){
     self.pkg.name <- 'EaCoN'
     ref.dir <- system.file("data-raw/", package = self.pkg.name)
   }
   setwd(ref.dir)
+  ### /TEMP
   
-  ## Check if files exist:
+  ## Check if files exist:  (I  Don't think downloading works properly yet)
   seg.f <- .checkAndDownloadFile(pattern="whitelisted.seg$", download=download.files)
   anno.f <- .checkAndDownloadFile(pattern="annotations.tsv$", download=download.files)
   abs.f <- .checkAndDownloadFile(pattern="abs_segtabs.fixed.txt$", download=download.files)
@@ -144,17 +146,17 @@ createPancanSegRef <- function(ref.dir=NULL, out.dir=NULL, verbose=T,
   if(verbose){
     ap.cnt <- nrow(anno.ploidy)
     aps.cnt <- nrow(anno.ploidy.seg)
-    a.cnt <- nrow(pancan.data[['anno']])
+    a.cnt <- length(unique(pancan.data[['anno']]$patient_barcode))
     p.cnt <- nrow(pancan.data[['ploidy']])
     s.cnt <- length(unique(pancan.data[['seg']]$Sample))
     
     cat('> Overlap between Annotations and Ploidy:\n')
-    cat(paste0("\t[", ap.cnt, " / ", a.cnt, "] samples have an associated ploidy/purity value \n"))
-    cat(paste0("\t[", ap.cnt, " / ", p.cnt, "] samples with purity/ploidy values have an associated annotation \n"))
-    
-    cat('> Overlap between Annotations, Ploidy and Seg-data:\n')
+    cat(paste0("\t[", p.cnt, " / ", a.cnt, "] samples have some annotation \n"))
+    cat(paste0("\t[", ap.cnt, " / ", p.cnt, "] annotated samples have an estimated purity/ploidy value \n"))
     cat(paste0("\t[", aps.cnt, " / ", ap.cnt, "] annotated-ploidy samples also have seg-data \n"))
-    cat(paste0("\t[", aps.cnt, " / ", s.cnt, "] samples with seg-data have an associated annotation and ploidy value \n"))
+    
+    #cat('> Overlap between Annotations, Ploidy and Seg-data:\n')
+    #cat(paste0("\t[", aps.cnt, " / ", s.cnt, "] samples with seg-data have an associated annotation and ploidy value \n"))
   }
   
   ## Create a data structure of ploidy probabilities per TCGA onco-codes

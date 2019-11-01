@@ -144,9 +144,10 @@ fitOptimalGamma <- function(fit.val, sample=NULL, gamma.meta=NULL, pancan.ploidy
 
 ASCAT.selectBestFit <- function(fit.val, gamma.method='GoF', ...){
   idx <- switch(gamma.method,
-                "GoF"=which.max(fit.val$GoF),
-                'psi'=which.min(fit.val$psi),
-                'score'=fitOptimalGamma(fit.val, ...))
+                GoF=which.max(fit.val$GoF),
+                psi=which.min(fit.val$psi),
+                score=fitOptimalGamma(fit.val, ...),
+                dev=temp())
   gamma <- fit.val$gamma[idx]
   tmsg(paste0("Gamma: ", gamma, " [method=", gamma.method, "]"))
   
