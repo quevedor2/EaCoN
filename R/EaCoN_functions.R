@@ -348,7 +348,9 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06,
   loss.idx <- which(l2r.segments$Value < l.cut)
   normal.idx <- which(l2r.segments$Value >= l.cut & l2r.segments$Value <= g.cut)
   tmsg("Writing CBS files ...")
-  data$cbs$nocut <- data.frame(Samplename = samplename, l2r.segments[,c(1, 3, 4, 6, 5)], stringsAsFactors = FALSE)
+  data$cbs$nocut <- data.frame(Samplename = samplename, 
+                               l2r.segments[,c(1, 3, 4, 6, 5)], 
+                               stringsAsFactors = FALSE)
   colnames(data$cbs$nocut) <- c(samplename, "Chr", "Start", "End", "Probes", "Log2Ratio")
   my.cbs.cut <- data$cbs$nocut
   my.cbs.cut$Log2Ratio[my.cbs.cut$Log2Ratio > l.cut & my.cbs.cut$Log2Ratio < g.cut] <- 0
@@ -362,7 +364,11 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06,
   ## REPLOTS
   if (plot) {
     tmsg("Plotting ...")
-    l2r.seg.obj <- list(pos = l2r.segments, idx = list(gain = gain.idx, loss = loss.idx, normal = normal.idx), cutval = c(l.cut, g.cut))
+    l2r.seg.obj <- list(pos = l2r.segments, 
+                        idx = list(gain = gain.idx, 
+                                   loss = loss.idx, 
+                                   normal = normal.idx), 
+                        cutval = c(l.cut, g.cut))
     seg.col <- list(gain = "blue", outscale.gain = "midnightblue", loss = "red", outscale.loss = "darkred", normal = "black")
     l2r.chr <- unname(unlist(cs$chrom2chr[as.character(data$data$SNPpos$chrs)]))
     l2r.value <- data.frame(Chr = l2r.chr,
@@ -378,12 +384,12 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06,
     
     png(paste0(samplename, ".SEG.ASCAT.png"), width = 1850, height = 980)
     par(mar = c(1, 6, 3, 1), mfrow = c(2, 1))
-    EaCoN.l2rplot.geno(l2r = l2r.value,
+    EaCoN:::EaCoN.l2rplot.geno(l2r = l2r.value,
                        seg = l2r.seg.obj,
                        seg.col = seg.col,
                        seg.type = "block",
                        seg.normal = TRUE,
-                       genome.pkg = genome.pkg,
+                       genome.pkg = data$meta$basic$genome.pkg,
                        title = paste0(samplename, " L2R"),
                        ylim = c(-1.5,1.5))
     

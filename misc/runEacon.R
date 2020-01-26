@@ -1,83 +1,23 @@
 #### Libraries ####
 ## Instal ASCAT and FACETS
-devtools::install_github("Crick-CancerGenomics/ascat/ASCAT")
-devtools::install_github("mskcc/facets")
-
-## Instal Bioconductor packages
-source("https://bioconductor.org/biocLite.R")
-biocLite(c("affxparser", "Biostrings", "aroma.light", "BSgenome", "copynumber", "GenomicRanges", "limma", "rhdf5", "sequenza"))
-
-## Install the most recent STABLE version (@master)
-#devtools::install_github("gustaveroussy/EaCoN")
-
-install.packages("https://partage.gustaveroussy.fr/pydio_public/083305?dl=true&file=/affy.CN.norm.data_0.1.2.tar.gz", repos = NULL, type = "source")
-devtools::install_github("gustaveroussy/apt.snp6.1.20.0")
-install.packages("https://partage.gustaveroussy.fr/pydio_public/152397?dl=true&file=/GenomeWideSNP.6.na35.r1_0.1.0.tar.gz", repos = NULL, type = "source")
-install.packages( "https://partage.gustaveroussy.fr/pydio_public/e6fe22?dl=true&file=/rcnorm_0.1.5.tar.gz", repos = NULL, type = "source")
-
-###################
-#### Variables ####
-library(EaCoN)
-library(foreach)
-sample <- "YT_4941"
-segmenter <- 'ASCAT'
-pdir <- '/mnt/work1/users/home2/quever/snp6tmp'
-
-## ASCN.ASCAT:
-
-tmsg <- function (text = NULL) {
-  message(paste0(" [", Sys.info()[["nodename"]], ":", Sys.getpid(), 
-                 "] ", text))
+install.pkg <- FALSE
+if(install.pkg){
+  devtools::install_github("Crick-CancerGenomics/ascat/ASCAT")
+  devtools::install_github("mskcc/facets")
+  
+  ## Instal Bioconductor packages
+  source("https://bioconductor.org/biocLite.R")
+  biocLite(c("affxparser", "Biostrings", "aroma.light", "BSgenome", "copynumber", "GenomicRanges", "limma", "rhdf5", "sequenza"))
+  
+  ## Install the most recent STABLE version (@master)
+  #devtools::install_github("gustaveroussy/EaCoN")
+  
+  install.packages("https://partage.gustaveroussy.fr/pydio_public/083305?dl=true&file=/affy.CN.norm.data_0.1.2.tar.gz", repos = NULL, type = "source")
+  devtools::install_github("gustaveroussy/apt.snp6.1.20.0")
+  install.packages("https://partage.gustaveroussy.fr/pydio_public/152397?dl=true&file=/GenomeWideSNP.6.na35.r1_0.1.0.tar.gz", repos = NULL, type = "source")
+  install.packages( "https://partage.gustaveroussy.fr/pydio_public/e6fe22?dl=true&file=/rcnorm_0.1.5.tar.gz", repos = NULL, type = "source")
+  
 }
-write.table.fast <- function (x, file = NULL, header = TRUE, sep = "\t", fileEncoding = "", 
-                              row.names = FALSE, ...) {
-  if (header) 
-    write.table(x = x[NULL, ], file = file, sep = "\t", quote = FALSE, 
-                row.names = FALSE, fileEncoding = fileEncoding)
-  if (!row.names) 
-    rownames(x) <- NULL
-  trychk <- try(iotools::write.csv.raw(x = x, file = file, 
-                                       sep = sep, col.names = FALSE, fileEncoding = fileEncoding, 
-                                       append = header, ...))
-  if (!is.null(trychk)) {
-    print("Fast write failed, using canonical write.table ...")
-    write.table(x = x, file = file, sep = sep, row.names = row.names, 
-                quote = FALSE)
-  }
-  gc()
-}
-EaCoN.Rorschard.plot <- function (data = NULL, cnpTotal = NULL) {
-  k.sqrt <- ceiling(sqrt(length(data$data$chrs)))
-  par(mar = c(1, 1, 1, 1), mfrow = c(k.sqrt, k.sqrt))
-  for (k in 1:length(data$data$ch)) {
-    graphics::plot(data$data$Tumor_BAF[[1]][data$germline$germlinegenotypes], 
-                   data$data$Tumor_LogR[[1]][data$germline$germlinegenotypes], 
-                   pch = ".", cex = 2, xlim = c(0, 1), ylim = c(-2, 
-                                                                2), col = "grey95")
-    points(data$data$Tumor_BAF[[1]][!data$germline$germlinegenotypes], 
-           data$data$Tumor_LogR[[1]][!data$germline$germlinegenotypes], 
-           pch = ".", cex = 2, col = "grey50")
-    kin <- data$data$ch[[k]][!(data$data$ch[[k]] %in% which(data$germline$germlinegenotypes))]
-    r.col <- if (is.null(cnpTotal)) 
-      3
-    else cnpTotal[kin] + 1
-    points(data$data$Tumor_BAF[[1]][kin], data$data$Tumor_LogR[[1]][kin], 
-           pch = ".", cex = 4, col = r.col)
-    try(text(x = 0.5, y = 2, labels = data$data$chrs[k], 
-             pos = 1, cex = 2))
-  }
-}
-
-
-RDS.file <- list.files(file.path(pdir, sample, segmenter, "L2R"), pattern=".RDS$")
-data <- readRDS(file.path(pdir, sample, segmenter, 'L2R', RDS.file))
-out.dir <- file.path(pdir, sample, segmenter, 'ASCN')
-
-gammaRange = c(.35,.7)
-nsubthread = 1
-cluster.type = "PSOCK"
-force = FALSE
-
 
 ##############
 #### Main ####
@@ -93,8 +33,10 @@ option_list <- list(
               help="Index of sample group [default= %default]", metavar="integer"),
   make_option(c("-g", "--grpsize"), type="integer", default=10,
               help="Size of the groups to run in one job [default= %default]", metavar="integer"),
-  make_option(c("-d", "--dataset"), type="character", default=NULL,
-              help="Dataset to use, either 'GDSC' or CCLE'"))
+  make_option(c("-d", "--dataset"), type="character", default='GDSC',
+              help="Dataset to use, either 'GDSC' or CCLE'"),
+  make_option(c("-p", "--pdir"), type="character", default='/mnt/work1/users/pughlab/projects/cancer_cell_lines',
+              help="Parent directory path"))
 opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
 
@@ -141,10 +83,11 @@ opt <- parse_args(opt_parser)
 
 segmenter <- 'ASCAT'
 dataset <- opt$dataset  #'GDSC'
-pdir <- file.path('/mnt/work1/users/pughlab/projects/cancer_cell_lines', dataset)
+pdir <- file.path(opt$pdir, dataset)
 
 ## Normalization
 # Outputs a ./YT_4941/YT_4941_GenomeWideSNP_6_hg19_processed.RDS file
+message(paste0("Searching for CEL$ files in: ", file.path(pdir, "data")))
 CEL.dir <- file.path(pdir, "data")
 sample.paths <- list.files(CEL.dir, pattern="CEL$", recursive = T, 
                          ignore.case = T, full.names = T)
@@ -153,14 +96,12 @@ regm <- regexpr(".cel", basename(sample.paths), ignore.case=T)
 cel.suffix <- regmatches(x = basename(sample.paths), m = regm)
 
 
-
-
 dir.create(file.path(pdir, "eacon"), recursive = TRUE)
 setwd(file.path(pdir, "eacon"))
 
 
 
-qsub.split <- TRUE
+qsub.split <- FALSE
 if(qsub.split){
   if(file.exists(file.path("..", "scripts", "samples.RData"))){
     EaCoN:::tmsg("Getting sample IDs...")
@@ -215,7 +156,7 @@ mclapply(sample.ids, function(sample, sample.paths){
 #### L2R Segmentation: ####
 # Takes in the _processed.RDS file 
 for(segmenter in c("ASCAT")){
-  print(segmenter)
+  message("Running L2R segmentation...")
   
   ## Select non-processed files
   RDS.files <- .removeRedundantFiles(pattern1="_processed.RDS$", 
@@ -228,7 +169,7 @@ for(segmenter in c("ASCAT")){
 
 #### ASCN Calls: ####
 for(segmenter in c("ASCAT")){
-  print(segmenter)
+  message("Obtaining allele-specific copy number (ASCN) calls...")
   ## CN Estimation:
   # Provides ASCN calls from ASCAT
   l2r.rds <- .removeRedundantFiles(pattern1=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"), 
@@ -243,7 +184,7 @@ for(segmenter in c("ASCAT")){
 
 #### Output builder: ####
 for(segmenter in c("ASCAT")){
-  print(segmenter)
+  message("Selecting the best gamma fit for ASCAT, annotating, and generating output files...")
   if(toupper(segmenter)=='ASCAT'){
     
     fit.vals.path <- unlist(sapply(list.files(), function(x){
@@ -252,8 +193,7 @@ for(segmenter in c("ASCAT")){
         file.path(".", x, segmenter, "ASCN", paste0(x, ".gammaEval.txt"))
       }
     }))
-    # fit.vals.path <- list.files(pattern="gammaEval.txt", recursive=T, full=T)
-    
+
     if(any(grepl("bkup", fit.vals.path))) fit.vals.path <- fit.vals.path[-grep("bkup", fit.vals.path)]
     all.fits <- lapply(fit.vals.path, function(fvp){
       list(fit=read.table(fvp, sep="\t", header=T, stringsAsFactors = F, 
@@ -291,7 +231,8 @@ for(segmenter in c("ASCAT")){
       gr.cnv <- annotateRDS.Batch(all.fits[r['start']:r['end']], 
                                   toupper(segmenter), nthread=3,
                                   gamma.method='score', gamma.meta=meta.l$meta.tcga,
-                                  pancan.ploidy=pancan.ploidy, feature.set=c('bins', 'tads'))
+                                  pancan.ploidy=pancan.ploidy, 
+                                  feature.set=c('bins', 'tads'))
       
       cbio.path=file.path("out", "cBio")
       buildCbioOut(gr.cnv, cbio.path="./out/cBio")

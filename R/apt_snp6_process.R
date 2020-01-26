@@ -137,7 +137,8 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL,
   )
 
   ## Extracting data : L2R
-  ao.df <- dplyr::as.tbl(data.frame(my.oschp$MultiData$CopyNumber[,c(2:4)], L2R.ori = as.vector(my.oschp$MultiData$CopyNumber[[l2r.lev.conv[[l2r.level]]]])))
+  ao.df <- dplyr::as.tbl(data.frame(my.oschp$MultiData$CopyNumber[,c(2:4)],  #probeset, chr, pos
+                                    L2R.ori = as.vector(my.oschp$MultiData$CopyNumber[[l2r.lev.conv[[l2r.level]]]])))
   affy.meta <- my.oschp$Meta
   affy.chrom <- my.oschp$MultiData[["CopyNumber_&keyvals"]][seq.int(3, nrow(my.oschp$MultiData[["CopyNumber_&keyvals"]]), 3),1:2]
   ao.df$L2R <- ao.df$L2R.ori
@@ -150,6 +151,7 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL,
   ## Normalizing SNPs
   tmsg("Normalizing SNP data (using rcnorm) ...")
   baf.df <- rcnorm::rcnorm.snp(myCEL = CEL, genome.pkg = genome.pkg, allSNPs = FALSE)
+  #baf.df.bkup <- baf.df
   baf.df$chr <- paste0("chr", baf.df$chrs)
   baf.df$chrN <- unlist(cs$chrom2chr[baf.df$chr])
   baf.df <- baf.df[order(baf.df$chrN, baf.df$pos),]
@@ -188,7 +190,7 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL,
   minseglen <- 50
   # nna <- !is.na(ao.df$BAF)
   nna <- !is.na(ao.df$BAF) & !is.na(ao.df[["Allele Difference"]])
-  ao.df$mBAF <- BAF2mBAF(ao.df$BAF)
+  ao.df$mBAF <- EaCoN:::BAF2mBAF(ao.df$BAF)
   # str(peltres <- changepoint::cpt.meanvar(ao.df$mBAF[nna], penalty = "MBIC", method = "PELT", minseglen = minseglen)@cpts)
   peltres <- changepoint::cpt.var(ao.df[["Allele Difference"]][nna], penalty = "BIC", method = "PELT", minseglen = minseglen)@cpts
   

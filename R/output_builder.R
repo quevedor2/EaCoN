@@ -8,6 +8,53 @@ loadBestFitRDS <- function(sample, gamma, segmenter){
   return(rds)
 }
 
+loadL2R <- function(sample, segmenter){
+  RDS.file <- file.path(sample, toupper(segmenter), 'L2R', 
+                        paste(sample, 'SEG', toupper(segmenter), 'RDS', sep="."))
+  rds <- readRDS(RDS.file)
+  l2r <- cleanL2Rdat(rds)
+  return(l2r)
+}
+
+cleanL2Rdat <- function(data){
+  l2r.segments <- data$cbs$nocut
+  l2r.segments$Value <- l2r.segments$Log2Ratio
+  
+  g.cut <- data$meta$eacon[["L2R-segments-gain-cutoff"]]
+  l.cut <- data$meta$eacon[["L2R-segments-loss-cutoff"]]
+  
+  gain.idx <- which(l2r.segments$Value > g.cut)
+  loss.idx <- which(l2r.segments$Value < l.cut)
+  normal.idx <- which(l2r.segments$Value >= l.cut & l2r.segments$Value <= g.cut)
+  
+  l2r.seg.obj <- list(pos = l2r.segments, 
+                      idx = list(gain = gain.idx, 
+                                 loss = loss.idx, 
+                                 normal = normal.idx), 
+                      cutval = c(l.cut, g.cut))
+  seg.col <- list(gain = "blue", outscale.gain = "midnightblue", loss = "red", outscale.loss = "darkred", normal = "black")
+  
+  genome.pkg = data$meta$basic$genome.pkg
+  suppressPackageStartupMessages(require(genome.pkg, character.only = TRUE))
+  BSg.obj <- getExportedValue(genome.pkg, genome.pkg)
+  genome <- BSgenome::providerVersion(BSg.obj)
+  cs <- EaCoN:::chromobjector(BSg.obj)
+  
+  l2r.chr <- as.integer(unname(unlist(cs$chrom2chr[as.character(data$data$SNPpos$chrs)])))
+  
+  l2r.value <- data.frame(Chr = l2r.chr,
+                          Start = as.integer(data$data$SNPpos$pos),
+                          End = as.integer(data$data$SNPpos$pos),
+                          Value = data$data$Tumor_LogR_wins[,1],
+                          stringsAsFactors = FALSE)
+  samplename=data$meta$basic$samplename
+  list("l2r.value"=l2r.value,
+       "l2r.seg.obj"=l2r.seg.obj,
+       "seg.col"=seg.col,
+       "genome.pkg"=genome.pkg,
+       "sample.name"=samplename)
+}
+
 cleanGR <- function(gr0){
   for(i in c(1:ncol(elementMetadata(gr0)))){
     icol <- elementMetadata(gr0)[,i]
@@ -175,8 +222,23 @@ genWindowedBed <- function(bin.size=1000000, seq.style="UCSC"){
   gr
 }
 
-segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin'){
+segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin', l2r.dat=NULL){
   olaps = findOverlaps(cnv, bed)
+  
+  if(!is.null(l2r.dat)){
+    ## Developmental: Include the block running median
+    require(dplyr)
+    seg <- l2r.dat$l2r.seg.obj
+    seg$pos$Chr <- gsub("^23$", "X", seg$pos$Chr) %>% gsub("^24$", "Y", .)
+    l2r.gr <- makeGRangesFromDataFrame(seg$pos, keep.extra.columns = TRUE)[,'Log2Ratio']
+    seqlevelsStyle(l2r.gr) <- 'UCSC'
+    ovidx <- findOverlaps(cnv, l2r.gr)
+    
+    mcl <- as.data.frame(mcols(cnv[queryHits(ovidx),]))
+    mcl$Log2Ratio <- round(l2r.gr[subjectHits(ovidx),]$Log2Ratio, 3)
+    mcols(cnv) <- mcl
+  }
+  
   
   # Flag BED bins that map to multiple CNVs
   dup.idx <- which(duplicated(subjectHits(olaps), fromLast=TRUE))
@@ -272,24 +334,35 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
 #'  annotateRDS(fit.val.df, 'SampleX', 'ASCAT', build='hg19', bin.size=50000)
 annotateRDS <- function(fit.val, sample, segmenter, build='hg19', 
                         bin.size=50000, feature.set=c('bins'), ...){
+  print(paste0("Bin size: ", bin.size))
   ## Assemble the ASCAT Seg file into a CNV GRanges object
-  # gamma <- ASCAT.selectBestFit(fit.val, sample=sample, gamma.method='score',
+  # sample <- all.fits[[1]]$sample
+  # fit.val <- all.fits[[1]]$fit
+  # gamma <- EaCoN:::ASCAT.selectBestFit(fit.val, sample=sample, gamma.method='score',
   #                              gamma.meta=meta, pancan.ploidy=pancan.ploidy)
-  gamma <- ASCAT.selectBestFit(fit.val, sample=sample, ...)
-  my.data <- loadBestFitRDS(sample, gamma, segmenter)
-  genes <- getGenes(build)
+  # segmenter <- 'ASCAT'
+  # build <- 'hg19'
+  # EaCoN:::
+  gamma <- EaCoN:::ASCAT.selectBestFit(fit.val, sample=sample, ...)
+  my.data <- EaCoN:::loadBestFitRDS(sample, gamma, segmenter)
+  #l2r.data <- loadL2R(sample, segmenter)
+  genes <- EaCoN:::getGenes(build)
+  # EaCoN.l2rplot.geno(l2r = l2r.value, seg = l2r.seg.obj, seg.col = seg.col,
+  #                    seg.type = "block", seg.normal = TRUE, genome.pkg = genome.pkg,
+  #                    title = paste0(samplename, " L2R"), ylim = c(-1.5,1.5))
+  
   
   tmsg(paste0("Annotating sample: ", sample, " [gamma:", gamma, "]..."))
   cnv <- makeGRangesFromDataFrame(my.data$segments_raw, keep.extra.columns=TRUE, 
                                   start.field='startpos', end.field='endpos')
-  cnv <- cleanGR(cnv)
+  cnv <- EaCoN:::cleanGR(cnv)
 
   ## Annotate the CNVs based on:
   cl.anno <- list()
   
   # Genes
   cols <- c('nMajor', 'nMinor', 'nAraw', 'nBraw', 'TCN', 'seg.mean')
-  cl.anno[['genes']] <- suppressMessages(annotateCNVs(cnv, genes$txdb, 
+  cl.anno[['genes']] <- suppressMessages(EaCoN:::annotateCNVs(cnv, genes$txdb, 
                                                       anno=genes$txdb.genes, cols=cols))
   cl.anno$genes$genes <- cl.anno$genes$genes[-which(is.na(cl.anno$genes$genes$SYMBOL)),]
   
@@ -300,8 +373,8 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
     switch(fset,
            bins={
              tmsg("Assembling 'Bin' features...")
-             windowed.bed <- genWindowedBed(bin.size=bin.size)
-             segmentCNVs(cnv, windowed.bed, reduce='median', feature.id = fset)
+             windowed.bed <- EaCoN:::genWindowedBed(bin.size=bin.size)
+             EaCoN:::segmentCNVs(cnv, windowed.bed, reduce='median', feature.id = fset) #, l2r.dat=l2r.data)
            },
            tads={
              tmsg("Assembling 'TAD' features...")
@@ -337,7 +410,7 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
 #' @examples
 #'     gr.cnv <- annotateRDS.Batch(all.fits, toupper(segmenter), nthread=3)
 annotateRDS.Batch <- function(all.fits, segmenter, nthread = 1, 
-                              cluster.type = "PSOCK", ...){
+                              cluster.type = "PSOCK", bin.size=50000, ...){
   if (length(all.fits) < nthread) nthread <- length(all.fits)
   `%dopar%` <- foreach::"%dopar%"
   cl <- parallel::makeCluster(spec = nthread, type = cluster.type, outfile = "")
@@ -346,7 +419,7 @@ annotateRDS.Batch <- function(all.fits, segmenter, nthread = 1,
                                   .inorder = TRUE, 
                                   .errorhandling = "stop",
                                   .export = ls(globalenv())) %dopar% {
-                                    annotateRDS(r$fit, r$sample, segmenter, build='hg19', bin.size=50000, ...)
+                                    annotateRDS(r$fit, r$sample, segmenter, build='hg19', bin.size=bin.size, ...)
                                   }
   parallel::stopCluster(cl)
   names(grcnv.batch) <- sapply(all.fits, function(x) x$sample)
