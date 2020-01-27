@@ -5,7 +5,8 @@
 \title{PSet builder for PharmacoGX}
 \usage{
 buildPSetOut(gr.cnv, anno.name, pset.path, cols = c("seg.mean", "nAraw",
-  "nBraw", "nMinor", "nMajor", "TCN"), ...)
+  "nBraw", "nMinor", "nMajor", "TCN"), verbose = T, out.idx = NULL,
+  ...)
 }
 \arguments{
 \item{gr.cnv}{List output from annotateRDS.Batch() function}

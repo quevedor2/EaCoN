@@ -5,7 +5,7 @@
 \title{Batch wrapper for annotateRDS()}
 \usage{
 annotateRDS.Batch(all.fits, segmenter, nthread = 1,
-  cluster.type = "PSOCK", ...)
+  cluster.type = "PSOCK", bin.size = 50000, ...)
 }
 \arguments{
 \item{all.fits}{Sample named-list of all samples containing two elements:
