@@ -6,8 +6,8 @@
 \usage{
 buildCbioOut(gr.cnv, cbio.path = "./out/cBio", pattern = "_CNA",
   cbio.cna.file = NULL, cbio.linear.file = NULL,
-  cbio.seg.file = NULL, amp.thresh = 5, add.on.to.existing = TRUE,
-  ...)
+  cbio.seg.file = NULL, cbio.RAWseg.file = NULL, amp.thresh = 5,
+  add.on.to.existing = TRUE, ...)
 }
 \arguments{
 \item{gr.cnv}{List output from annotateRDS.Batch() function}
