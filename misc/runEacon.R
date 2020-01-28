@@ -33,8 +33,8 @@ option_list <- list(
               help="Index of sample group [default= %default]", metavar="integer"),
   make_option(c("-g", "--grpsize"), type="integer", default=10,
               help="Size of the groups to run in one job [default= %default]", metavar="integer"),
-  make_option(c("-d", "--dataset"), type="character", default='GDSC',
-              help="Dataset to use, either 'GDSC' or CCLE'"),
+  make_option(c("-d", "--dataset"), type="character", default='GNE',
+              help="Dataset to use, either 'GDSC' or 'GNE' or 'CCLE'"),
   make_option(c("-p", "--pdir"), type="character", default='/mnt/work1/users/pughlab/projects/cancer_cell_lines',
               help="Parent directory path"))
 opt_parser <- OptionParser(option_list=option_list)
@@ -157,11 +157,16 @@ if(qsub.split){
   }
 }
 
-mclapply(sample.ids, function(sample, sample.paths){
-  idx <- grep(sample, basename(sample.paths))
-  SNP6.Process(CEL = file.path(CEL.dir, paste0(sample, cel.suffix[idx])), 
-               samplename = sample)
-}, sample.paths=sample.paths, mc.cores = 2)
+if(dataset=='GNE'){
+  
+} else {
+  mclapply(sample.ids, function(sample, sample.paths){
+    idx <- grep(sample, basename(sample.paths))
+    SNP6.Process(CEL = file.path(CEL.dir, paste0(sample, cel.suffix[idx])), 
+                 samplename = sample)
+  }, sample.paths=sample.paths, mc.cores = 2)
+}
+
 
 
 #### L2R Segmentation: ####

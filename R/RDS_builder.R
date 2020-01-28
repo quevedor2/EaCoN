@@ -140,7 +140,7 @@ Build.OMNI25 <- function(illumina.dir, parent.dir){
       rds <- list("data"=data.tmp,
                   "meta"=meta.tmp,
                   "germline"=gg.tmp)
-      sample.dir <- file.path(parent.dir, "EaCoN", s)
+      sample.dir <- file.path(parent.dir, "eacon", s)
       dir.create(sample.dir, recursive = TRUE, showWarnings = FALSE)
       saveRDS(rds, file=file.path(sample.dir, paste0(s, "_processed.RDS")))
     })
