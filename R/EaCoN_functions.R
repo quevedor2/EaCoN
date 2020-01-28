@@ -56,7 +56,7 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06,
   tmsg(paste0("Loading ", genome.pkg, " ..."))
   suppressPackageStartupMessages(require(genome.pkg, character.only = TRUE))
   BSg.obj <- getExportedValue(genome.pkg, genome.pkg)
-  cs <- chromobjector(BSg.obj)
+  cs <- EaCoN:::chromobjector(BSg.obj)
   
   ## Init graphical parameters
   oridir <- getwd()
@@ -118,18 +118,23 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06,
   ## BAF filtering
   tmsg("Filtering BAF...")
   if ("Tumor_BAF.unisomy" %in% names(data$data)) {
-    called <- which(!data$germline$germlinegenotypes & !is.na(data$germline$germlinegenotypes) & !is.na(data$data$Tumor_BAF[,1]) & !data$data$Tumor_BAF.unisomy[,1])
+    called <- which(!data$germline$germlinegenotypes & 
+                      !is.na(data$germline$germlinegenotypes) & 
+                      !is.na(data$data$Tumor_BAF[,1]) & 
+                      !data$data$Tumor_BAF.unisomy[,1])
   } else {
-    called <- which(!data$germline$germlinegenotypes & !is.na(data$germline$germlinegenotypes) & !is.na(data$data$Tumor_BAF[,1]))
+    called <- which(!data$germline$germlinegenotypes & 
+                      !is.na(data$germline$germlinegenotypes) & 
+                      !is.na(data$data$Tumor_BAF[,1]))
   }
-  mBAF <- BAF2mBAF(data$data$Tumor_BAF[,1])
+  mBAF <- EaCoN:::BAF2mBAF(data$data$Tumor_BAF[,1])
   smoB <- round(length(called) / 3300)
   if(smoB%%2 == 0) smoB <- smoB+1
   mBAF.rm <- runmed(mBAF[called], smoB)
   mBAF.diff <- abs(mBAF[called] - mBAF.rm)
   Bfiltered <- mBAF.diff <= quantile(mBAF.diff, BAF.filter)
   if (any(Bfiltered)) data$germline$germlinegenotypes[called][!Bfiltered] <- TRUE
-  rm(called, mBAF, smoB, mBAF.rm, mBAF.diff, Bfiltered)
+  #rm(called, mBAF, smoB, mBAF.rm, mBAF.diff, Bfiltered)
   
   ## Edging BAF
   # bnna <- !is.na(data$data$Tumor_BAF)
@@ -139,13 +144,13 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06,
   ## Rorschard plot
   if (plot) {
     png(paste0(samplename, ".Rorschach.png"), width = 980, height = 980)
-    EaCoN.Rorschard.plot(data = data)
+    EaCoN:::EaCoN.Rorschard.plot(data = data)
     dev.off()
   }
   
   ## Computing gaps
   if (!is.null(mingap)) {
-    data$data$chr <- foreach(k = data$data$ch, .combine = "c") %do% {
+    data$data$chr <- foreach(k = data$data$ch, .combine = "c", .packages="foreach") %do% {
       gapz <- which(diff(data$data$SNPpos$pos[k]) >= mingap)
       return(unname(split(k, findInterval(k, k[gapz+1]))))
     }
@@ -216,8 +221,14 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06,
   
   ## Winsorization (for aesthetics)
   tmsg("Smoothing L2R (for plots)...")
-  cndf <- data.frame(Chr = rep(unlist(cs$chrom2chr[data$data$chrs]), vapply(data$data$ch, length, 1L)), Position = unlist(data$data$ch), MySample = data$data$Tumor_LogR[[1]], stringsAsFactors = FALSE)
-  cndf.wins <- copynumber::winsorize(data = cndf, pos.unit = "bp", method = "mad", k = 5, tau = 1, verbose = FALSE)
+  cndf <- data.frame(Chr = rep(unlist(cs$chrom2chr[data$data$chrs]), 
+                               vapply(data$data$ch, length, 1L)), 
+                     Position = unlist(data$data$ch), 
+                     MySample = data$data$Tumor_LogR[[1]], 
+                     stringsAsFactors = FALSE)
+  cndf.wins <- copynumber::winsorize(data = cndf, pos.unit = "bp", 
+                                     method = "mad", k = 5, 
+                                     tau = 1, verbose = FALSE)
   data$data$Tumor_LogR_wins <- cndf.wins[, 3, drop = FALSE]
   colnames(data$data$Tumor_LogR_wins) <- samplename
   rm(list = c("cndf", "cndf.wins"))
@@ -315,7 +326,7 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06,
     segdf <- segdf[, c(3, 4, 7, 8, 2, 1, 6, 5)]
   }
   
-  my.mad <- get.mad(data$data$Tumor_LogR[,1])
+  my.mad <- EaCoN:::get.mad(data$data$Tumor_LogR[,1])
   
   if (calling.method == "mad") {
     g.cut <- my.mad * nrf
@@ -393,7 +404,7 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06,
                        title = paste0(samplename, " L2R"),
                        ylim = c(-1.5,1.5))
     
-    EaCoN.bafplot.geno(baf = baf.value,
+    EaCoN:::EaCoN.bafplot.geno(baf = baf.value,
                        seg = baf.seg,
                        seg.type = "both",
                        genome.pkg = genome.pkg,
@@ -1303,7 +1314,8 @@ Segment.ff <- function(RDS.file = NULL, segmenter = "ASCAT", ...) {
 }
 
 ## Run Segment.ff() in batch mode
-Segment.ff.Batch <- function (RDS.files = list.files(path = getwd(), pattern = "_processed.RDS$", full.names = TRUE, recursive = TRUE, ignore.case = TRUE, include.dirs = FALSE), segmenter = "ASCAT", nthread = 1, cluster.type = "PSOCK", ...) {
+Segment.ff.Batch <- function (RDS.files = list.files(path = getwd(), pattern = "_processed.RDS$", full.names = TRUE, recursive = TRUE, ignore.case = TRUE, include.dirs = FALSE), 
+                              segmenter = "ASCAT", nthread = 1, cluster.type = "PSOCK", ...) {
   if (length(RDS.files) == 0) stop("A list of RDS files is required !", call. = FALSE)
   message("Running EaCoN.Segment.ff() in batch mode ...")
   message(paste0(" Found ", length(RDS.files), " files to process."))

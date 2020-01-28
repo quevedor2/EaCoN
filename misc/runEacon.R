@@ -59,9 +59,20 @@ opt <- parse_args(opt_parser)
 }
 
 .removeRedundantFiles <- function(pattern1, pattern2, unlink.path=NULL){
-  p1.files <- list.files(pattern=pattern1, recursive = TRUE, full.names = TRUE)
-  p2.files <- list.files(pattern=pattern2, recursive=T, full=T)
-  rm.ids <- sapply(strsplit(p2.files, "/"), function(x) x[[2]])
+  #p1.files <- list.files(pattern=pattern1, recursive = TRUE, full.names = TRUE)
+  p1.files <- as.character(sapply(list.files(), function(f){
+    list.files(path = file.path(f), pattern=pattern1, full.names = TRUE)
+  }))
+  p2.files <- as.character(sapply(list.files(), function(f){
+    list.files(path = file.path(f, "ASCAT", "L2R"), pattern=pattern2, 
+               recursive=T, full=T)
+  }))
+  zero1.idx <- sapply(p1.files, function(i) i == "character(0)") 
+  zero2.idx <- sapply(p2.files, function(i) i == "character(0)") 
+  if(any(zero1.idx)) p1.files <- p1.files[-which(zero1.idx)]
+  if(any(zero2.idx)) p2.files <- p2.files[-which(zero2.idx)]
+  
+  rm.ids <- sapply(strsplit(p2.files, "/"), function(x) x[[1]])
   rm.idx <- unlist(sapply(rm.ids, function(x) grep(paste0("\\/", x, "\\/"), p1.files)))
   if(length(rm.idx) > 0){
     p.files <- p1.files[-rm.idx]
@@ -82,7 +93,7 @@ opt <- parse_args(opt_parser)
 
 
 segmenter <- 'ASCAT'
-dataset <- opt$dataset  #'GDSC'
+dataset <- opt$dataset  #'GDSC', 'CCLE', 'gCSI'
 pdir <- file.path(opt$pdir, dataset)
 
 ## Normalization
@@ -159,6 +170,7 @@ for(segmenter in c("ASCAT")){
   message("Running L2R segmentation...")
   
   ## Select non-processed files
+
   RDS.files <- .removeRedundantFiles(pattern1="_processed.RDS$", 
                                      pattern2=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"),
                                      unlink.path = file.path(toupper(segmenter), "L2R"))
@@ -178,7 +190,7 @@ for(segmenter in c("ASCAT")){
   l2r.rds <- .splitSamples(l2r.rds, opt$idx, opt$grpsize)
   print(l2r.rds)
   
-  fit.val <- ASCN.ff.Batch(RDS.files = l2r.rds, nthread=2)
+  fit.val <- EaCoN:::ASCN.ff.Batch(RDS.files = l2r.rds, nthread=2)
 }
 
 
@@ -232,10 +244,11 @@ for(segmenter in c("ASCAT")){
                                   toupper(segmenter), nthread=3,
                                   gamma.method='score', gamma.meta=meta.l$meta.tcga,
                                   pancan.ploidy=pancan.ploidy, 
-                                  feature.set=c('bins', 'tads'))
+                                  feature.set=c('bins', 'tads'),
+                                  bin.size=5000)
       
       cbio.path=file.path("out", "cBio")
-      buildCbioOut(gr.cnv, cbio.path="./out/cBio")
+      # buildCbioOut(gr.cnv, cbio.path="./out/cBio")
       
       ## Build standard bin and gene PSets
       pset.path=file.path("out", "PSet")

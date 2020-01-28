@@ -1,3 +1,15 @@
+#' Build.SNP6
+#'
+#' @param ao.df 
+#' @param meta.b 
+#' @param affy.meta 
+#' @param CEL 
+#' @param sex.chr 
+#' @param samplename 
+#' @param cs 
+#'
+#' @return
+#' @export
 Build.SNP6 <- function(ao.df, meta.b, affy.meta, CEL, sex.chr, samplename, cs){
   tmsg("Building normalized object ...")
   # my.ch <- sapply(unique(ao.df$chr), function(x) { which(ao.df$chr == x) })
@@ -50,3 +62,95 @@ Build.SNP6 <- function(ao.df, meta.b, affy.meta, CEL, sex.chr, samplename, cs){
   
   return(my.ascat.obj)
 }
+
+#' Build.OMNI25
+#'
+#' @param illumina.dir 
+#' @param parent.dir 
+#'
+#' @return
+#' @export
+#'
+#' @examples Build.OMNI25(illumina.dir='/mnt/work1/users/pughlab/projects/cancer_cell_lines/GNE/illumina/GNE_Matrices',
+#' eacon.dir='/mnt/work1/users/pughlab/projects/cancer_cell_lines/GNE')
+Build.OMNI25 <- function(illumina.dir, parent.dir){
+  #gne.mat.dir <- '/mnt/work1/users/pughlab/projects/cancer_cell_lines/GNE/illumina/GNE_Matrices'
+  #illumina.dir <- '/mnt/work1/users/pughlab/projects/cancer_cell_lines/GNE/illumina/GNE_Matrices'
+  require(ASCAT)
+  require(dplyr)
+  
+  # Log all Log2R and BAF files
+  logr.files <- list.files(file.path(illumina.dir, 'LogR'), pattern="LogR")
+  baf.files <- list.files(file.path(illumina.dir, 'BAF'), pattern="BAF")
+  ids <- gsub("^.*_", "", logr.files) %>% gsub(".txt", "", .)
+  
+  # Split each sample into an individaul RDS
+  lapply(ids, function(i){
+    # Find sample in each baf/log2r matrix
+    f.l2r.idx <- grep(paste0("_", i, ".txt"), logr.files)
+    f.baf.idx <- grep(paste0("_", i, ".txt"), baf.files)
+    
+    ascat.obj.path <- file.path(illumina.dir, "ASCAT_obj", paste0("ascat_", i, ".rda"))
+    if(!file.exists(ascat.obj.path)){
+      tmsg("Creating ASCAT object from LogR and BAF...")
+      ascat.bc = ASCAT::ascat.loadData(Tumor_LogR_file=file.path(illumina.dir, "LogR", logr.files[f.l2r.idx]),
+                                       Tumor_BAF_file=file.path(illumina.dir, "BAF", baf.files[f.baf.idx]))
+      gg <- ASCAT::ascat.predictGermlineGenotypes(ascat.bc, platform = "Illumina2.5M")
+      dir.create(file.path(illumina.dir, "ASCAT_obj"), showWarnings = FALSE)
+      save(ascat.bc, gg, file=ascat.obj.path)
+    } else {
+      tmsg("Reading in LogR/BAF ASCAT objects")
+      load(ascat.obj.path)
+    }
+    
+    samples <- gsub("\\.Log R.*", "", colnames(ascat.bc$Tumor_LogR))
+    colnames(ascat.bc$Tumor_LogR) <- colnames(ascat.bc$Tumor_BAF) <- ascat.bc$samples <-samples
+    colnames(gg$germlinegenotypes) <- samples
+    
+    ## Create a simple meta info sheet
+    meta <- list(
+      "basic"=list(
+        samplename=samples,
+        source='microarray',
+        source.file='',
+        type='Illumina2.5M',
+        manufacturer='Infinium',
+        species="Homo sapiens",
+        genome='hg19',
+        genome.pkg="BSgenome.Hsapiens.UCSC.hg19",
+        predicted.gender='XY',
+        wave.renorm='',
+        gc.renorm='GC50,GC100'),
+      "affy"=NULL
+    )
+    
+    ## Loop through each sample and split into the ao.df data structure
+    tmp <- lapply(samples, function(s){
+      data.tmp <- ascat.bc
+      gg.tmp <- gg
+      meta.tmp <- meta
+      
+      data.tmp$Tumor_LogR = ascat.bc$Tumor_LogR[,s,drop=FALSE]
+      data.tmp$Tumor_BAF = ascat.bc$Tumor_BAF[,s,drop=FALSE]
+      data.tmp$samples = s
+      data.tmp$gender = ascat.bc$gender[match(s, samples)]
+      gg.tmp$germlinegenotypes = gg.tmp$germlinegenotypes[,s,drop=FALSE]
+      meta.tmp$basic$samplename = s
+      
+      rds <- list("data"=data.tmp,
+                  "meta"=meta.tmp,
+                  "germline"=gg.tmp)
+      sample.dir <- file.path(parent.dir, "EaCoN", s)
+      dir.create(sample.dir, recursive = TRUE, showWarnings = FALSE)
+      saveRDS(rds, file=file.path(sample.dir, paste0(s, "_processed.RDS")))
+    })
+  })
+}
+
+# segmenter = 'ASCAT'
+# RDS.files = file.path(sample.dir, paste0(s, "_processed.RDS"))
+# EaCoN:::Segment.ff.Batch(RDS.file = RDS.files,  segmenter = segmenter, nthread=5)
+# 
+# l2r.rds <- file.path(sample.dir, 'ASCAT', 'L2R', paste0(s, '.SEG.ASCAT.RDS'))
+# file.path(sample.dir, paste0(s, "_processed.RDS"))
+# fit.val <- EaCoN:::ASCN.ff.Batch(RDS.files = l2r.rds, nthread=2)
