@@ -2046,7 +2046,16 @@ ASCN.ff <- function(RDS.file = NULL, ...) {
   do.call(paste0("ASCN.", toupper(segmenter)), list(data = my.data, out.dir = out.dir, ...))
 }
 
-## Run ASCN.ff() in batch mode
+
+#' ASCN.ff.Batch
+#' @description Run ASCN.ff() in batch mode
+#' @param RDS.files 
+#' @param nthread 
+#' @param cluster.type 
+#' @param ... 
+#'
+#' @return
+#' @export
 ASCN.ff.Batch <- function(RDS.files = list.files(path = getwd(), pattern = "\\.SEG\\..*\\.RDS$", full.names = TRUE, recursive = TRUE, ignore.case = TRUE, include.dirs = FALSE), nthread = 1, cluster.type = "PSOCK", ...) {
   if (length(RDS.files) == 0) stop("A list of RDS files is required !", call. = FALSE)
   message("Running EaCoN.ASCN.ff() in batch mode ...")
