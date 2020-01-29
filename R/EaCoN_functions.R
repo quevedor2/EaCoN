@@ -1313,7 +1313,15 @@ Segment.ff <- function(RDS.file = NULL, segmenter = "ASCAT", ...) {
           list(data = my.data, out.dir = dirname(RDS.file), ...))
 }
 
-## Run Segment.ff() in batch mode
+#' Run Segment.ff() in batch mode
+#' @param RDS.files 
+#' @param segmenter 
+#' @param nthread 
+#' @param cluster.type 
+#' @param ... 
+#'
+#' @return
+#' @export
 Segment.ff.Batch <- function (RDS.files = list.files(path = getwd(), pattern = "_processed.RDS$", full.names = TRUE, recursive = TRUE, ignore.case = TRUE, include.dirs = FALSE), 
                               segmenter = "ASCAT", nthread = 1, cluster.type = "PSOCK", ...) {
   if (length(RDS.files) == 0) stop("A list of RDS files is required !", call. = FALSE)
@@ -1325,7 +1333,10 @@ Segment.ff.Batch <- function (RDS.files = list.files(path = getwd(), pattern = "
     `%dopar%` <- foreach::"%dopar%"
     cl <- parallel::makeCluster(spec = nthread, type = cluster.type, outfile = "")
     doParallel::registerDoParallel(cl)
-    eacon.batchres <- foreach::foreach(r = seq_along(RDS.files), .inorder = TRUE, .errorhandling = "stop") %dopar% {
+    eacon.batchres <- foreach::foreach(r = seq_along(RDS.files), 
+                                       .inorder = TRUE, 
+                                       .errorhandling = "stop",
+                                       .packages="foreach") %dopar% {
       EaCoN.set.bitmapType(type = current.bitmapType)
       Segment.ff(RDS.file = RDS.files[r], segmenter = segmenter, ...)
     }

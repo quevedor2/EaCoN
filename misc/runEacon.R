@@ -158,7 +158,8 @@ if(qsub.split){
 }
 
 if(dataset=='GNE'){
-  
+  illumina.dir <- file.path(pdir, 'illumina', 'GNE_Matrices')
+  EaCoN::Build.OMNI25(illumina.dir=illumina.dir, parent.dir=pdir)
 } else {
   mclapply(sample.ids, function(sample, sample.paths){
     idx <- grep(sample, basename(sample.paths))
@@ -181,7 +182,7 @@ for(segmenter in c("ASCAT")){
                                      unlink.path = file.path(toupper(segmenter), "L2R"))
   RDS.files <- .splitSamples(RDS.files, opt$idx, opt$grpsize)
   
-  Segment.ff.Batch(RDS.file = RDS.files,  segmenter = segmenter, nthread=5)
+  EaCoN:::Segment.ff.Batch(RDS.file = RDS.files,  segmenter = segmenter, nthread=5)
 }
 
 #### ASCN Calls: ####
