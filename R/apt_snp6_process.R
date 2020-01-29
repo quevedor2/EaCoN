@@ -150,7 +150,9 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL,
   
   ## Normalizing SNPs
   tmsg("Normalizing SNP data (using rcnorm) ...")
-  baf.df <- rcnorm::rcnorm.snp(myCEL = CEL, genome.pkg = genome.pkg, allSNPs = FALSE)
+  baf.df <- rcnorm::rcnorm.snp(myCEL = CEL, 
+                               genome.pkg = genome.pkg, 
+                               allSNPs = FALSE)
   #baf.df.bkup <- baf.df
   baf.df$chr <- paste0("chr", baf.df$chrs)
   baf.df$chrN <- unlist(cs$chrom2chr[baf.df$chr])
@@ -158,7 +160,13 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL,
   baf.df <- baf.df[!is.na(baf.df$BAF),]
   gc()
   
-  ao.df <- suppressWarnings(Reduce(function(t1, t2) dplyr::left_join(t1, t2, by = "ProbeSetName"), list(ao.df, dplyr::as.tbl(data.frame(ProbeSetName = rownames(baf.df), BAF.ori = baf.df$BAF, BAF = baf.df$BAF)), dplyr::as.tbl(my.oschp$MultiData$CopyNumber[,c(2,9)]))))
+  ao.df <- suppressWarnings(Reduce(function(t1, t2) 
+    dplyr::left_join(t1, t2, by = "ProbeSetName"), 
+    list(ao.df, 
+         dplyr::as.tbl(data.frame(ProbeSetName = rownames(baf.df), 
+                                  BAF.ori = baf.df$BAF, 
+                                  BAF = baf.df$BAF)), 
+         dplyr::as.tbl(my.oschp$MultiData$CopyNumber[,c(2,9)]))))
   rm(my.oschp, baf.df)
   gc()
   

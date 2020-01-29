@@ -58,14 +58,26 @@ opt <- parse_args(opt_parser)
   }
 }
 
-.removeRedundantFiles <- function(pattern1, pattern2, unlink.path=NULL){
+.removeRedundantFiles <- function(pattern1, pattern2, unlink.path=NULL, 
+                                  astep="L2R", segmenter='ASCAT'){
   #p1.files <- list.files(pattern=pattern1, recursive = TRUE, full.names = TRUE)
+  dirs <- function(f, astep, segmenter='ASCAT'){
+    switch(astep,
+         "L2R"={
+           read.dir <- file.path(f)
+           out.dir <- file.path(f, toupper(segmenter), astep)
+         },
+         "ASCN"={
+           read.dir <- file.path(f, toupper(segmenter), 'L2R')
+           out.dir <- file.path(f, toupper(segmenter), astep)
+         })
+    return(list("read"=read.dir, "out"=out.dir))
+  }
   p1.files <- as.character(sapply(list.files(), function(f){
-    list.files(path = file.path(f), pattern=pattern1, full.names = TRUE)
+    list.files(path = dirs(f, astep, segmenter)$read, pattern=pattern1, full.names = TRUE)
   }))
   p2.files <- as.character(sapply(list.files(), function(f){
-    list.files(path = file.path(f, "ASCAT", "L2R"), pattern=pattern2, 
-               recursive=T, full=T)
+    list.files(path = dirs(f, astep, segmenter)$out, pattern=pattern2, recursive=T, full=T)
   }))
   zero1.idx <- sapply(p1.files, function(i) i == "character(0)") 
   zero2.idx <- sapply(p2.files, function(i) i == "character(0)") 
@@ -82,8 +94,9 @@ opt <- parse_args(opt_parser)
   
   if(!is.null(unlink.path)){
     print(paste0("Unlinking files in path: <Sample>/", unlink.path))
-    files.to.unlink <- sapply(strsplit(p.files, "/"), function(x) x[[2]])
+    files.to.unlink <- sapply(strsplit(p.files, "/"), function(x) x[[1]])
     sapply(files.to.unlink, function(ftu){
+      print(file.path(ftu, unlink.path))
       unlink(x = file.path(ftu, unlink.path), recursive = T)
     })
   }
@@ -182,7 +195,7 @@ for(segmenter in c("ASCAT")){
                                      unlink.path = file.path(toupper(segmenter), "L2R"))
   RDS.files <- .splitSamples(RDS.files, opt$idx, opt$grpsize)
   
-  EaCoN:::Segment.ff.Batch(RDS.file = RDS.files,  segmenter = segmenter, nthread=5)
+  EaCoN:::Segment.ff.Batch(RDS.file = RDS.files,  segmenter = segmenter, nthread=2)
 }
 
 #### ASCN Calls: ####
@@ -192,11 +205,12 @@ for(segmenter in c("ASCAT")){
   # Provides ASCN calls from ASCAT
   l2r.rds <- .removeRedundantFiles(pattern1=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"), 
                                    pattern2="gammaEval.txt$",
-                                   unlink.path = file.path(toupper(segmenter), "ASCN"))
+                                   unlink.path = file.path(toupper(segmenter), "ASCN"), 
+                                   astep="ASCN", segmenter=toupper(segmenter))
   l2r.rds <- .splitSamples(l2r.rds, opt$idx, opt$grpsize)
   print(l2r.rds)
   
-  fit.val <- EaCoN:::ASCN.ff.Batch(RDS.files = l2r.rds, nthread=2)
+  fit.val <- EaCoN:::ASCN.ff.Batch(RDS.files = l2r.rds, nthread=2, force=TRUE)
 }
 
 

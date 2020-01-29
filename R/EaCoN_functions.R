@@ -2058,7 +2058,10 @@ ASCN.ff.Batch <- function(RDS.files = list.files(path = getwd(), pattern = "\\.S
     cl <- parallel::makeCluster(spec = nthread, type = cluster.type, outfile = "")
     doParallel::registerDoParallel(cl)
     r <- ""
-    eacon.batchres <- foreach::foreach(r = seq_along(RDS.files), .inorder = TRUE, .errorhandling = "stop") %dopar% {
+    eacon.batchres <- foreach::foreach(r = seq_along(RDS.files), 
+                                       .inorder = TRUE, 
+                                       .errorhandling = "stop",
+                                       .packages='foreach') %dopar% {
       EaCoN.set.bitmapType(type = current.bitmapType)
       ASCN.ff(RDS.file = RDS.files[r], ...)
     }

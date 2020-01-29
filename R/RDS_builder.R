@@ -10,7 +10,7 @@
 #'
 #' @return
 #' @export
-Build.SNP6 <- function(ao.df, meta.b, affy.meta, CEL, sex.chr, samplename, cs){
+Build.SNP6 <- function(ao.df, meta.b, affy.meta, CEL, sex.chr, samplename, cs, num.cores=4){
   tmsg("Building normalized object ...")
   # my.ch <- sapply(unique(ao.df$chr), function(x) { which(ao.df$chr == x) })
   my.ascat.obj <- list(
@@ -85,7 +85,7 @@ Build.OMNI25 <- function(illumina.dir, parent.dir){
   ids <- gsub("^.*_", "", logr.files) %>% gsub(".txt", "", .)
   
   # Split each sample into an individaul RDS
-  lapply(ids, function(i){
+  mclapply(ids, function(i){
     # Find sample in each baf/log2r matrix
     f.l2r.idx <- grep(paste0("_", i, ".txt"), logr.files)
     f.baf.idx <- grep(paste0("_", i, ".txt"), baf.files)
@@ -136,7 +136,11 @@ Build.OMNI25 <- function(illumina.dir, parent.dir){
       data.tmp$gender = ascat.bc$gender[match(s, samples)]
       gg.tmp$germlinegenotypes = gg.tmp$germlinegenotypes[,s,drop=FALSE]
       meta.tmp$basic$samplename = s
-      
+      if(!all(grepl("^chr", data.tmp$chrs))){
+        data.tmp$chrs <- paste0("chr", data.tmp$chrs)
+        data.tmp$sexchromosomes <- paste0("chr", data.tmp$sexchromosomes)
+        data.tmp$SNPpos$chrs <- paste0("chr", as.character(data.tmp$SNPpos$chrs))
+      }
       rds <- list("data"=data.tmp,
                   "meta"=meta.tmp,
                   "germline"=gg.tmp)
@@ -144,7 +148,7 @@ Build.OMNI25 <- function(illumina.dir, parent.dir){
       dir.create(sample.dir, recursive = TRUE, showWarnings = FALSE)
       saveRDS(rds, file=file.path(sample.dir, paste0(s, "_processed.RDS")))
     })
-  })
+  }, mc.cores = num.cores)
 }
 
 # segmenter = 'ASCAT'
