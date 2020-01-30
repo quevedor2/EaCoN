@@ -229,7 +229,7 @@ flagMultiBins <- function(olaps){
   return(dup.idx)
 }
 
-reduceMultiBins <- function(cnv, dup.idx, reduce='median'){
+reduceMultiBins <- function(cnv, dup.idx, olaps, reduce='median'){
   dup.df <- as.data.frame(olaps[dup.idx,])
   dup.spl <- split(dup.df, dup.df$subjectHits)
   
@@ -248,7 +248,7 @@ reduceMultiBins <- function(cnv, dup.idx, reduce='median'){
   return(dup.em)
 }
 
-populateNewMcols <- function(ref, cnv, dup.em){
+populateNewMcols <- function(ref, cnv, dup.em, olaps, dup.idx){
   em  <- matrix(nrow=length(ref), 
                 ncol=(ncol(mcols(cnv)) + ncol(mcols(ref))), 
                 dimnames = list(NULL,
@@ -268,9 +268,9 @@ segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin', l2r.dat=NULL)
   dup.idx <- flagMultiBins(olaps)
   # Use a summary metric (Default=mean) to reduce the CNV information that
   # spans multiple bed windows
-  dup.em <- reduceMultiBins(cnv, dup.idx, reduce=reduce)
+  dup.em <- reduceMultiBins(cnv, dup.idx, olaps, reduce=reduce)
   # Initialize a metadata matrix and populate it for the BED GRanges object
-  em <- populateNewMcols(bed, cnv, dup.em)
+  em <- populateNewMcols(bed, cnv, dup.em, olaps, dup.idx)
   
   if(!is.null(l2r.dat)){
     ## Developmental: Include the block running median
@@ -287,8 +287,8 @@ segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin', l2r.dat=NULL)
     ## Repeat previous steps using the generated ASCN calls
     olaps = findOverlaps(l2r.gr, ref)
     dup.idx <- flagMultiBins(olaps)
-    dup.em <- reduceMultiBins(l2r.gr, dup.idx, reduce=reduce)
-    em <- populateNewMcols(ref, l2r.gr, dup.em)
+    dup.em <- reduceMultiBins(l2r.gr, dup.idx, olaps, reduce=reduce)
+    em <- populateNewMcols(ref, l2r.gr, dup.em, olaps, dup.idx)
     em$Log2Ratio <- round(em$Log2Ratio, 3)
   }
   

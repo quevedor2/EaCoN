@@ -33,7 +33,7 @@ option_list <- list(
               help="Index of sample group [default= %default]", metavar="integer"),
   make_option(c("-g", "--grpsize"), type="integer", default=10,
               help="Size of the groups to run in one job [default= %default]", metavar="integer"),
-  make_option(c("-d", "--dataset"), type="character", default='CCLE',
+  make_option(c("-d", "--dataset"), type="character", default='GDSC',
               help="Dataset to use, either 'GDSC' or 'GNE' or 'CCLE'"),
   make_option(c("-p", "--pdir"), type="character", default='/mnt/work1/users/pughlab/projects/cancer_cell_lines',
               help="Parent directory path"))
