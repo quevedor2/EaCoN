@@ -33,7 +33,7 @@ option_list <- list(
               help="Index of sample group [default= %default]", metavar="integer"),
   make_option(c("-g", "--grpsize"), type="integer", default=10,
               help="Size of the groups to run in one job [default= %default]", metavar="integer"),
-  make_option(c("-d", "--dataset"), type="character", default='GNE',
+  make_option(c("-d", "--dataset"), type="character", default='CCLE',
               help="Dataset to use, either 'GDSC' or 'GNE' or 'CCLE'"),
   make_option(c("-p", "--pdir"), type="character", default='/mnt/work1/users/pughlab/projects/cancer_cell_lines',
               help="Parent directory path"))
@@ -59,7 +59,7 @@ opt <- parse_args(opt_parser)
 }
 
 .removeRedundantFiles <- function(pattern1, pattern2, unlink.path=NULL, 
-                                  astep="L2R", segmenter='ASCAT'){
+                                  astep="L2R", segmenter='ASCAT', overwrite=FALSE){
   #p1.files <- list.files(pattern=pattern1, recursive = TRUE, full.names = TRUE)
   dirs <- function(f, astep, segmenter='ASCAT'){
     switch(astep,
@@ -77,20 +77,28 @@ opt <- parse_args(opt_parser)
     list.files(path = dirs(f, astep, segmenter)$read, pattern=pattern1, full.names = TRUE)
   }))
   p2.files <- as.character(sapply(list.files(), function(f){
-    list.files(path = dirs(f, astep, segmenter)$out, pattern=pattern2, recursive=T, full=T)
+    list.files(path = dirs(f, astep, segmenter)$out, pattern=pattern2, recursive=FALSE, full=T)
   }))
   zero1.idx <- sapply(p1.files, function(i) i == "character(0)") 
   zero2.idx <- sapply(p2.files, function(i) i == "character(0)") 
   if(any(zero1.idx)) p1.files <- p1.files[-which(zero1.idx)]
   if(any(zero2.idx)) p2.files <- p2.files[-which(zero2.idx)]
   
-  rm.ids <- sapply(strsplit(p2.files, "/"), function(x) x[[1]])
-  rm.idx <- unlist(sapply(rm.ids, function(x) grep(paste0("\\/", x, "\\/"), p1.files)))
-  if(length(rm.idx) > 0){
-    p.files <- p1.files[-rm.idx]
+  if(overwrite){
+    rm.ids <- sapply(strsplit(p2.files, "/"), function(x) x[[1]])
+    rm.idx <- unlist(sapply(rm.ids, function(x) grep(paste0("\\/", x, "\\/"), p1.files)))
+    if(length(rm.idx) > 0){
+      p.files <- p1.files[-rm.idx]
+    } else {
+      p.files <- p1.files
+    }
   } else {
-    p.files <- p1.files
+    p2.ids <- sapply(strsplit(p2.files, "/"), function(x) x[[1]])
+    p1.ids <- sapply(strsplit(p1.files, "/"), function(x) x[[1]])
+    p.ids <- setdiff(p1.ids, p2.ids)
+    p.files <- as.character(setNames(p1.files, p1.ids)[p.ids])
   }
+  
   
   if(!is.null(unlink.path)){
     print(paste0("Unlinking files in path: <Sample>/", unlink.path))
@@ -192,7 +200,8 @@ for(segmenter in c("ASCAT")){
 
   RDS.files <- .removeRedundantFiles(pattern1="_processed.RDS$", 
                                      pattern2=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"),
-                                     unlink.path = file.path(toupper(segmenter), "L2R"))
+                                     unlink.path = file.path(toupper(segmenter), "L2R"),
+                                     astep="L2R", segmenter=toupper(segmenter))
   RDS.files <- .splitSamples(RDS.files, opt$idx, opt$grpsize)
   
   EaCoN:::Segment.ff.Batch(RDS.file = RDS.files,  segmenter = segmenter, nthread=2)

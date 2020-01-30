@@ -10,21 +10,27 @@ Segment.ASCAT <- function(data = NULL, mingap = 5E+06,
                           write.data = TRUE, 
                           plot = TRUE, force = FALSE) {
   
-  # setwd("/home/job/Documents/ROSCOFF/Roscoff_2018/TP_CNV/WES/REDUX/A18R.11.17.18")
-  # data <- readRDS("A18R.11.17.18_hs37d5_b50_processed.RDS")
+  # setwd("/mnt/work1/users/pughlab/projects/cancer_cell_lines/CCLE/eacon")
+  # RDS.file='VAULT_p_NCLE_DNAAffy14_GenomeWideSNP_6_F05_698718/VAULT_p_NCLE_DNAAffy14_GenomeWideSNP_6_F05_698718_GenomeWideSNP_6_hg19_processed.RDS'
+  # data <- readRDS(RDS.file)
+  # out.dir = dirname(RDS.file)
   # mingap = 5E+06
-  # smooth.k = 5
+  # smooth.k = NULL
   # BAF.filter = .75
   # homoCut = .05
   # penalty = 50
   # recenter = "l2r.centeredpeak"
   # calling.method = "mad"
-  # nrf = 1
-  # SER.pen = 5
-  # out.dir = getwd()
-  # return.data = FALSE
+  # nrf = .5
+  # SER.pen = 40
+  # return.data = FALSE 
   # write.data = TRUE
   # plot = TRUE
+  # force = FALSE
+  # tmsg <- function (text = NULL) {
+  #   message(paste0(" [", Sys.info()[["nodename"]], ":", Sys.getpid(), 
+  #                  "] ", text))
+  # }
   # require(foreach)
   # source("~/git_gustaveroussy/EaCoN/R/mini_functions.R")
   # source("~/git_gustaveroussy/EaCoN/R/plot_functions.R")

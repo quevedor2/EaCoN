@@ -222,33 +222,17 @@ genWindowedBed <- function(bin.size=1000000, seq.style="UCSC"){
   gr
 }
 
-segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin', l2r.dat=NULL){
-  olaps = findOverlaps(cnv, bed)
-  
-  if(!is.null(l2r.dat)){
-    ## Developmental: Include the block running median
-    require(dplyr)
-    seg <- l2r.dat$l2r.seg.obj
-    seg$pos$Chr <- gsub("^23$", "X", seg$pos$Chr) %>% gsub("^24$", "Y", .)
-    l2r.gr <- makeGRangesFromDataFrame(seg$pos, keep.extra.columns = TRUE)[,'Log2Ratio']
-    seqlevelsStyle(l2r.gr) <- 'UCSC'
-    ovidx <- findOverlaps(cnv, l2r.gr)
-    
-    mcl <- as.data.frame(mcols(cnv[queryHits(ovidx),]))
-    mcl$Log2Ratio <- round(l2r.gr[subjectHits(ovidx),]$Log2Ratio, 3)
-    mcols(cnv) <- mcl
-  }
-  
-  
-  # Flag BED bins that map to multiple CNVs
+flagMultiBins <- function(olaps){
   dup.idx <- which(duplicated(subjectHits(olaps), fromLast=TRUE))
   dup.idx <- c(dup.idx, which(duplicated(subjectHits(olaps), fromLast=FALSE)))
   dup.idx <- sort(dup.idx)
-  
-  # Use a summary metric (Default=mean) to reduce the CNV information that
-  # spans multiple bed windows
+  return(dup.idx)
+}
+
+reduceMultiBins <- function(cnv, dup.idx){
   dup.df <- as.data.frame(olaps[dup.idx,])
   dup.spl <- split(dup.df, dup.df$subjectHits)
+  
   dup.em <- lapply(dup.spl, function(i) {
     em.mat <- as.matrix(mcols(cnv[i$queryHits,]))
     storage.mode(em.mat) <- "numeric"
@@ -261,15 +245,52 @@ segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin', l2r.dat=NULL)
   })
   dup.em <- as.data.frame(do.call(rbind, dup.em))
   dup.em$sample <- unique(cnv$sample)
-  
-  # Initialize a metadata matrix and populate it for the BED GRanges object
-  em  <- matrix(nrow=length(bed), 
-                ncol=ncol(elementMetadata(cnv)), 
-                dimnames = list(NULL,colnames(elementMetadata(cnv))))
+  return(dup.em)
+}
+
+populateNewMcols <- function(ref, cnv, dup.em){
+  em  <- matrix(nrow=length(ref), 
+                ncol=(ncol(mcols(cnv)) + ncol(mcols(ref))), 
+                dimnames = list(NULL,
+                                c(colnames(mcols(ref)),
+                                  colnames(mcols(cnv)))))
   dedup.olaps <- olaps[-dup.idx,]
   em <- as.data.frame(em)
-  em[subjectHits(dedup.olaps),] <- as.data.frame(mcols(cnv)[queryHits(dedup.olaps),])
+  em[subjectHits(dedup.olaps),] <- as.data.frame(cbind(mcols(ref)[subjectHits(dedup.olaps),],
+                                                       mcols(cnv)[queryHits(dedup.olaps),]))
   em[unique(subjectHits(olaps)[dup.idx]),] <- dup.em
+  return(em)
+}
+
+segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin', l2r.dat=NULL){
+  olaps = findOverlaps(cnv, bed)
+  # Flag BED bins that map to multiple CNVs
+  dup.idx <- flagMultiBins(olaps)
+  # Use a summary metric (Default=mean) to reduce the CNV information that
+  # spans multiple bed windows
+  dup.em <- reduceMultiBins(cnv, dup.idx)
+  # Initialize a metadata matrix and populate it for the BED GRanges object
+  em <- populateNewMcols(bed, cnv, dup.em)
+  
+  if(!is.null(l2r.dat)){
+    ## Developmental: Include the block running median
+    require(dplyr)
+    seg <- l2r.dat$l2r.seg.obj
+    seg$pos$Chr <- gsub("^23$", "X", seg$pos$Chr) %>% gsub("^24$", "Y", .)
+    l2r.gr <- makeGRangesFromDataFrame(seg$pos, keep.extra.columns = TRUE)[,'Log2Ratio']
+    seqlevelsStyle(l2r.gr) <- 'UCSC'
+    ovidx <- findOverlaps(cnv, l2r.gr)
+    
+    ref <- bed
+    mcols(ref) <- em
+    
+    ## Repeat previous steps using the generated ASCN calls
+    olaps = findOverlaps(l2r.gr, ref)
+    dup.idx <- flagMultiBins(olaps)
+    dup.em <- reduceMultiBins(l2r.gr, dup.idx)
+    em <- populateNewMcols(ref, l2r.gr, dup.em)
+    em$Log2Ratio <- round(em$Log2Ratio, 3)
+  }
   
   # Append metadata and return
   bed$ID <- em$ID <- paste0(feature.id, "_", c(1:nrow(em)))
@@ -345,12 +366,16 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   # EaCoN:::
   gamma <- EaCoN:::ASCAT.selectBestFit(fit.val, sample=sample, ...)
   my.data <- EaCoN:::loadBestFitRDS(sample, gamma, segmenter)
-  #l2r.data <- loadL2R(sample, segmenter)
+  #l2r.data <- EaCoN:::loadL2R(sample, segmenter)
   genes <- EaCoN:::getGenes(build)
-  # EaCoN.l2rplot.geno(l2r = l2r.value, seg = l2r.seg.obj, seg.col = seg.col,
-  #                    seg.type = "block", seg.normal = TRUE, genome.pkg = genome.pkg,
-  #                    title = paste0(samplename, " L2R"), ylim = c(-1.5,1.5))
-  
+  # EaCoN:::EaCoN.l2rplot.geno(l2r = l2r.data$l2r.value,
+  #                            seg = l2r.data$l2r.seg.obj, 
+  #                            seg.col = l2r.data$seg.col,
+  #                            seg.type = "block", seg.normal = TRUE, 
+  #                            genome.pkg = l2r.data$genome.pkg,
+  #                            title = paste0(l2r.data$samplename, " L2R"),
+  #                            ylim = c(-1.5,1.5))
+
   
   tmsg(paste0("Annotating sample: ", sample, " [gamma:", gamma, "]..."))
   cnv <- makeGRangesFromDataFrame(my.data$segments_raw, keep.extra.columns=TRUE, 
@@ -368,13 +393,14 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   
   # Raw seg
   cl.anno[['seg']] <- as.data.frame(cnv)
+  cnv[seqnames(cnv)  == 'chr13']
   
   feature.anno <- lapply(feature.set, function(fset){
     switch(fset,
            bins={
              tmsg("Assembling 'Bin' features...")
              windowed.bed <- EaCoN:::genWindowedBed(bin.size=bin.size)
-             EaCoN:::segmentCNVs(cnv, windowed.bed, reduce='median', feature.id = fset) #, l2r.dat=l2r.data)
+             EaCoN:::segmentCNVs(cnv, windowed.bed, reduce='median', feature.id = fset, l2r.dat=l2r.data)
            },
            tads={
              tmsg("Assembling 'TAD' features...")
