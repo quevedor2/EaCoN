@@ -229,11 +229,11 @@ flagMultiBins <- function(olaps){
   return(dup.idx)
 }
 
-reduceMultiBins <- function(cnv, dup.idx){
+reduceMultiBins <- function(cnv, dup.idx, reduce='median'){
   dup.df <- as.data.frame(olaps[dup.idx,])
   dup.spl <- split(dup.df, dup.df$subjectHits)
   
-  dup.em <- lapply(dup.spl, function(i) {
+  dup.em <- lapply(dup.spl, function(i,reduce='median') {
     em.mat <- as.matrix(mcols(cnv[i$queryHits,]))
     storage.mode(em.mat) <- "numeric"
     switch(reduce,
@@ -242,7 +242,7 @@ reduceMultiBins <- function(cnv, dup.idx){
            max=do.call(pmax, lapply(1:nrow(em.mat), function(j) em.mat[j,])),
            median=apply(em.mat, 2, median))
     
-  })
+  }, reduce=reduce)
   dup.em <- as.data.frame(do.call(rbind, dup.em))
   dup.em$sample <- unique(cnv$sample)
   return(dup.em)
@@ -268,7 +268,7 @@ segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin', l2r.dat=NULL)
   dup.idx <- flagMultiBins(olaps)
   # Use a summary metric (Default=mean) to reduce the CNV information that
   # spans multiple bed windows
-  dup.em <- reduceMultiBins(cnv, dup.idx)
+  dup.em <- reduceMultiBins(cnv, dup.idx, reduce=reduce)
   # Initialize a metadata matrix and populate it for the BED GRanges object
   em <- populateNewMcols(bed, cnv, dup.em)
   
@@ -287,7 +287,7 @@ segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin', l2r.dat=NULL)
     ## Repeat previous steps using the generated ASCN calls
     olaps = findOverlaps(l2r.gr, ref)
     dup.idx <- flagMultiBins(olaps)
-    dup.em <- reduceMultiBins(l2r.gr, dup.idx)
+    dup.em <- reduceMultiBins(l2r.gr, dup.idx, reduce=reduce)
     em <- populateNewMcols(ref, l2r.gr, dup.em)
     em$Log2Ratio <- round(em$Log2Ratio, 3)
   }
@@ -366,7 +366,7 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   # EaCoN:::
   gamma <- EaCoN:::ASCAT.selectBestFit(fit.val, sample=sample, ...)
   my.data <- EaCoN:::loadBestFitRDS(sample, gamma, segmenter)
-  #l2r.data <- EaCoN:::loadL2R(sample, segmenter)
+  l2r.data <- EaCoN:::loadL2R(sample, segmenter)
   genes <- EaCoN:::getGenes(build)
   # EaCoN:::EaCoN.l2rplot.geno(l2r = l2r.data$l2r.value,
   #                            seg = l2r.data$l2r.seg.obj, 
@@ -393,8 +393,7 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   
   # Raw seg
   cl.anno[['seg']] <- as.data.frame(cnv)
-  cnv[seqnames(cnv)  == 'chr13']
-  
+
   feature.anno <- lapply(feature.set, function(fset){
     switch(fset,
            bins={
