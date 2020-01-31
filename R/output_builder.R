@@ -298,19 +298,16 @@ segmentCNVs <- function(cnv, bed, reduce='mean', feature.id='bin', l2r.dat=NULL)
   return(list(seg=bed, genes=em))
 }
 
-annotateCNVs <- function(cnv, txdb, anno=NULL,
-                         cols=c("seg.mean", "nA", "nB")){
-  stopifnot(is(cnv, "GRanges"), is(txdb, "TxDb"))
-  
-  ## Assign EntrezID to each segment 
-  if(is.null(anno)) anno = genes(txdb)
-  olaps = findOverlaps(cnv, anno)
+.assignEntrezToSegment <- function(cnv0, anno){
+  olaps = findOverlaps(cnv0, anno)
   mcols(olaps)$gene_id = anno$gene_id[subjectHits(olaps)]  # Fixed the code here
   cnv_factor = factor(queryHits(olaps), levels=seq_len(queryLength(olaps)))
-  cnv$gene_id = IRanges::splitAsList(mcols(olaps)$gene_id, cnv_factor)
-  
-  ## Assign EntrezID to each segment 
-  seg.entrez <- apply(as.data.frame(mcols(cnv)), 1, function(i){
+  gene.id <- IRanges::splitAsList(mcols(olaps)$gene_id, cnv_factor)
+  return(gene.id)
+}
+
+.splitSegmentByGene <- function(cnv0, cols){
+  seg.entrez <- apply(as.data.frame(mcols(cnv0)), 1, function(i){
     ids <- unlist(strsplit(x = as.character(unlist(i[['gene_id']])), split=","))
     segs <- do.call(rbind, replicate(length(ids), round(unlist(i[cols]),3), simplify = FALSE))
     
@@ -318,12 +315,32 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
   })
   seg.entrez <- do.call(rbind, seg.entrez)
   if(any(duplicated(seg.entrez$ENTREZ))) seg.entrez <- seg.entrez[-which(duplicated(seg.entrez$ENTREZ)),]
+  return(seg.entrez)
+}
+
+annotateCNVs <- function(cnv, txdb, anno=NULL,
+                         cols=c("seg.mean", "nA", "nB"),
+                         l2r.dat=NULL){
+  stopifnot(is(cnv, "GRanges"), is(txdb, "TxDb"))
   
+  ## Assign EntrezID to each segment 
+  if(is.null(anno)) anno = genes(txdb)
+  cnv$gene_id = EaCoN:::.assignEntrezToSegment(cnv, anno)
+  if(!is.null(l2r.dat)) l2r.dat$gene_id <-  EaCoN:::.assignEntrezToSegment(l2r.dat, anno)
+  
+  ## Split the segments by genes
+  seg.entrez <- EaCoN:::.splitSegmentByGene(cnv, cols)
+  if(!is.null(l2r.dat)) {
+    l2r.entrez <- EaCoN:::.splitSegmentByGene(l2r.dat, cols='Log2Ratio')
+    seg.l2r.entrez <- merge(seg.entrez, l2r.entrez, by='ENTREZ', all.x=TRUE)
+    seg.entrez <- seg.l2r.entrez
+  }
   
   ## Map ensembl and HUGO IDs to the ENTREZ ids
-  seg.anno <- merge(seg.entrez, getMapping(),
+  seg.anno <- merge(seg.entrez, EaCoN:::getMapping(),
                     by.x="ENTREZ", by.y="ENTREZID", all.x=TRUE)
   if(any(duplicated(seg.anno$ENTREZ))) seg.anno <- seg.anno[-which(duplicated(seg.anno$ENTREZ)),]
+  cols <- colnames(seg.entrez)[grep("ENTREZ", colnames(seg.entrez), invert = TRUE)]
   for(each.col in cols){
     seg.anno[,each.col] <- as.numeric(as.character(seg.anno[,each.col]))
   }
@@ -354,7 +371,7 @@ annotateCNVs <- function(cnv, txdb, anno=NULL,
 #' @examples
 #'  annotateRDS(fit.val.df, 'SampleX', 'ASCAT', build='hg19', bin.size=50000)
 annotateRDS <- function(fit.val, sample, segmenter, build='hg19', 
-                        bin.size=50000, feature.set=c('bins'), ...){
+                        bin.size=50000, feature.set=c('bins'), load.l2r=TRUE, ...){
   print(paste0("Bin size: ", bin.size))
   ## Assemble the ASCAT Seg file into a CNV GRanges object
   # sample <- all.fits[[1]]$sample
@@ -363,10 +380,11 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   #                              gamma.meta=meta, pancan.ploidy=pancan.ploidy)
   # segmenter <- 'ASCAT'
   # build <- 'hg19'
+  # tmsg=EaCoN:::tmsg
   # EaCoN:::
   gamma <- EaCoN:::ASCAT.selectBestFit(fit.val, sample=sample, ...)
   my.data <- EaCoN:::loadBestFitRDS(sample, gamma, segmenter)
-  l2r.data <- EaCoN:::loadL2R(sample, segmenter)
+  l2r.data <- if(load.l2r) EaCoN:::loadL2R(sample, segmenter) else NULL
   genes <- EaCoN:::getGenes(build)
   # EaCoN:::EaCoN.l2rplot.geno(l2r = l2r.data$l2r.value,
   #                            seg = l2r.data$l2r.seg.obj, 
@@ -387,8 +405,14 @@ annotateRDS <- function(fit.val, sample, segmenter, build='hg19',
   
   # Genes
   cols <- c('nMajor', 'nMinor', 'nAraw', 'nBraw', 'TCN', 'seg.mean')
+  if(!is.null(l2r.data)){
+    l2r.gr <- GenomicRanges::makeGRangesFromDataFrame(l2r.data$l2r.seg.obj$pos, keep.extra.columns = TRUE)
+    seqlevels(l2r.gr) <- c(1:22, "X", "Y")
+    seqlevelsStyle(l2r.gr) <- 'UCSC'
+  }
   cl.anno[['genes']] <- suppressMessages(EaCoN:::annotateCNVs(cnv, genes$txdb, 
-                                                      anno=genes$txdb.genes, cols=cols))
+                                                      anno=genes$txdb.genes, cols=cols,
+                                                      l2r.dat=l2r.gr))
   cl.anno$genes$genes <- cl.anno$genes$genes[-which(is.na(cl.anno$genes$genes$SYMBOL)),]
   
   # Raw seg

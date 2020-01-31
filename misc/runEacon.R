@@ -245,6 +245,12 @@ for(segmenter in c("ASCAT")){
     names(all.fits) <- sapply(all.fits, function(x) x$sample)
     
     meta.l <- switch(dataset,
+                     GNE={
+                       data(gne.meta)
+                       meta <- gne.meta[,c('INVENTORY_SAMPLE_NAME', 'TCGA_code')]
+                       colnames(meta) <- c('sample', 'TCGA_code')
+                       list('meta.tcga'=meta, 'meta'=gne.meta)
+                     },
                      CCLE={
                        data(CCLE_meta)
                        meta <- ccle.meta[,c('SNP arrays', 'tcga_code')]
@@ -282,7 +288,12 @@ for(segmenter in c("ASCAT")){
       
       ## Build standard bin and gene PSets
       pset.path=file.path("out", "PSet")
-      buildPSetOut(gr.cnv, dataset, pset.path, meta=meta.l$meta, out.idx=c(r['start'], r['end']))
+      col.ids <- colnames(gr.cnv[[1]]$bins$genes)[c(-1)]
+      col.ids <- c("seg.mean", col.ids[-c(grep("seg.mean", col.ids), length(col.ids))])
+      
+      buildPSetOut(gr.cnv, dataset, pset.path, 
+                   meta=meta.l$meta, out.idx=c(r['start'], r['end']),
+                   cols=col.ids)
       
       end_time <- Sys.time()
       t1 <- end_time - start_time
