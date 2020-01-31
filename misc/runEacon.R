@@ -59,7 +59,8 @@ opt <- parse_args(opt_parser)
 }
 
 .removeRedundantFiles <- function(pattern1, pattern2, unlink.path=NULL, 
-                                  astep="L2R", segmenter='ASCAT', overwrite=FALSE){
+                                  astep="L2R", segmenter='ASCAT', overwrite=FALSE,
+                                  unlink.stat=TRUE){
   #p1.files <- list.files(pattern=pattern1, recursive = TRUE, full.names = TRUE)
   dirs <- function(f, astep, segmenter='ASCAT'){
     switch(astep,
@@ -105,7 +106,7 @@ opt <- parse_args(opt_parser)
     files.to.unlink <- sapply(strsplit(p.files, "/"), function(x) x[[1]])
     sapply(files.to.unlink, function(ftu){
       print(file.path(ftu, unlink.path))
-      unlink(x = file.path(ftu, unlink.path), recursive = T)
+      if(unlink.stat) unlink(x = file.path(ftu, unlink.path), recursive = T)
     })
   }
   p.files
@@ -215,7 +216,7 @@ for(segmenter in c("ASCAT")){
   l2r.rds <- .removeRedundantFiles(pattern1=paste0("\\.SEG\\.", toupper(segmenter), ".*\\.RDS$"), 
                                    pattern2="gammaEval.txt$",
                                    unlink.path = file.path(toupper(segmenter), "ASCN"), 
-                                   astep="ASCN", segmenter=toupper(segmenter))
+                                   astep="ASCN", segmenter=toupper(segmenter)) #, unlink.stat=FALSE
   l2r.rds <- .splitSamples(l2r.rds, opt$idx, opt$grpsize)
   print(l2r.rds)
   
@@ -273,7 +274,7 @@ for(segmenter in c("ASCAT")){
                                   toupper(segmenter), nthread=3,
                                   gamma.method='score', gamma.meta=meta.l$meta.tcga,
                                   pancan.ploidy=pancan.ploidy, 
-                                  feature.set=c('bins', 'tads'),
+                                  feature.set=c('bins'),
                                   bin.size=5000)
       
       cbio.path=file.path("out", "cBio")
