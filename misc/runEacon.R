@@ -33,7 +33,7 @@ option_list <- list(
               help="Index of sample group [default= %default]", metavar="integer"),
   make_option(c("-g", "--grpsize"), type="integer", default=10,
               help="Size of the groups to run in one job [default= %default]", metavar="integer"),
-  make_option(c("-d", "--dataset"), type="character", default='GDSC',
+  make_option(c("-d", "--dataset"), type="character", default='CCLE',
               help="Dataset to use, either 'GDSC' or 'GNE' or 'CCLE'"),
   make_option(c("-p", "--pdir"), type="character", default='/mnt/work1/users/pughlab/projects/cancer_cell_lines',
               help="Parent directory path"))
@@ -115,7 +115,7 @@ opt <- parse_args(opt_parser)
 
 
 segmenter <- 'ASCAT'
-dataset <- opt$dataset  #'GDSC', 'CCLE', 'gCSI'
+dataset <- opt$dataset  #'GDSC', 'CCLE', 'GNE'
 pdir <- file.path(opt$pdir, dataset)
 
 ## Normalization
@@ -284,7 +284,7 @@ for(segmenter in c("ASCAT")){
                                   bin.size=5000)
       
       cbio.path=file.path("out", "cBio")
-      # buildCbioOut(gr.cnv, cbio.path="./out/cBio")
+      buildCbioOut(gr.cnv, cbio.path="./out/cBio")
       
       ## Build standard bin and gene PSets
       pset.path=file.path("out", "PSet")
