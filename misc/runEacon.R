@@ -283,13 +283,14 @@ for(segmenter in c("ASCAT")){
                                   feature.set=c('bins'),
                                   bin.size=5000)
       
-      cbio.path=file.path("out", "cBio")
-      buildCbioOut(gr.cnv, cbio.path="./out/cBio")
+      # cbio.path=file.path("out", "cBio")
+      # buildCbioOut(gr.cnv, cbio.path="./out/cBio")
       
       ## Build standard bin and gene PSets
       pset.path=file.path("out", "PSet")
       col.ids <- colnames(gr.cnv[[1]]$bins$genes)[c(-1)]
       col.ids <- c("seg.mean", col.ids[-c(grep("seg.mean", col.ids), length(col.ids))])
+      col.ids <- c("Log2Ratio", "L2Rraw")
       
       buildPSetOut(gr.cnv, dataset, pset.path, 
                    meta=meta.l$meta, out.idx=c(r['start'], r['end']),
