@@ -292,8 +292,10 @@ for(segmenter in c("ASCAT")){
       col.ids <- c("seg.mean", col.ids[-c(grep("seg.mean", col.ids), length(col.ids))])
       col.ids <- c("Log2Ratio", "L2Rraw")
       
-      buildPSetOut(gr.cnv, dataset, pset.path, 
-                   meta=meta.l$meta, out.idx=c(r['start'], r['end']),
+      buildPSetOut(gr.cnv, anno.name=dataset, pset.path, 
+                   seg.id='Log2Ratio',
+                   meta=meta.l$meta, 
+                   out.idx=c(r['start'], r['end']),
                    cols=col.ids)
       
       end_time <- Sys.time()

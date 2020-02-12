@@ -758,15 +758,16 @@ reduceEsetMats <- function(gene.lrr, cols, features='SYMBOL', ord=FALSE,
 #'     buildPSetOut(gr.cnv, "CGP", pset.path, meta=cell.line.anno)
 buildPSetOut <- function(gr.cnv, anno.name, pset.path, 
                          cols=c('seg.mean', 'nAraw', 'nBraw', 'nMinor', 'nMajor', 'TCN'), 
-                         verbose=T, out.idx=NULL, ...){
+                         verbose=T, seg.id='seg.mean', out.idx=NULL, ...){
   dir.create(pset.path, recursive = T, showWarnings = F)
   
   #### Assemble assayData environment ####
   if(verbose) print("Building assayData [Genes]...")
-  gene.mats <- reduceEsetMats(lapply(gr.cnv, function(x) x$genes), 
-                              cols, keys='SYMBOL', features='SYMBOL', ord=TRUE)
-  names(gene.mats) <- cols
-  gene.env <- .createEsetEnv(gene.mats, 'seg.mean')
+  genes.cols <- cols[which(cols %in% colnames(gr.cnv[[1]]$genes$genes))]
+  gene.mats <- EaCoN:::reduceEsetMats(lapply(gr.cnv, function(x) x$genes), 
+                                      genes.cols, keys='SYMBOL', features='SYMBOL', ord=TRUE)
+  names(gene.mats) <- genes.cols
+  gene.env <- EaCoN:::.createEsetEnv(gene.mats, seg.id)
     
   #### Assemble featureData #### 
   if(verbose) print("Assembling featureData [Genes]...")
@@ -777,7 +778,7 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
   #### Assemble PhenoData ####
   if(verbose) print("Assembling phenoData...")
   # Use exprs(assayData)
-  meta <- .overlapMetaWithExprs(exprs=gene.env$exprs, ...)
+  meta <- EaCoN:::.overlapMetaWithExprs(exprs=gene.env$exprs, ...)
   cl.phenoData <- new("AnnotatedDataFrame", data=meta)
   
   #### Assemble the eset #### 
@@ -793,10 +794,10 @@ buildPSetOut <- function(gr.cnv, anno.name, pset.path,
   f.esets <- lapply(feature.sets, function(f, pheno, anno){
     if(verbose) print(paste0("Assembling PSet for ", f))
     ## Build assayData
-    assay.mats <- reduceEsetMats(lapply(gr.cnv, function(x) x[[f]]), 
+    assay.mats <- EaCoN:::reduceEsetMats(lapply(gr.cnv, function(x) x[[f]]), 
                                  cols, features='ID', keys='ID', ord=TRUE)
     names(assay.mats) <- cols
-    assay.env <- .createEsetEnv(assay.mats, 'seg.mean')
+    assay.env <- EaCoN:::.createEsetEnv(assay.mats, seg.id)
     
     ## Build featureData
     fdata <- AnnotatedDataFrame(data=as.data.frame(gr.cnv[[1]][[f]])[,1:6],
