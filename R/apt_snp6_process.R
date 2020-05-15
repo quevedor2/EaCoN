@@ -254,6 +254,9 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL,
     smeds <- c(smeds, median(ao.df$mBAF[nna][bs.start[i]:bs.end[i]][!mcres %in% c(1,4)], na.rm = TRUE))
     hrates <- c(hrates, length(which(!mcres %in% c(1,4))) / length(mcres))
   }
+  if(any(is.na(smeds))) smeds[is.na(smeds)] <- median(smeds, na.rm=TRUE)
+  if(any(is.na(hrates))) hrates[is.na(hrates)] <- median(hrates, na.rm=TRUE)
+  hrates
   # plot(ao.df$BAF[nna], col = ao.df$cluster[nna], pch = ".", xaxs = "i", ylim = c(0,1))
   # abline(v=peltres)
   
@@ -282,6 +285,7 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL,
   ao.df$cluster2[ao.df$cluster2 > 1] <- 2
   target.hrate <- .3
   for(i in seq_along(hrates)) {
+    print(i)
     if (hrates[i] < .2 & smeds[i] < .45) {
       ao.df$cluster2[nna][bs.start[i]:bs.end[i]] <- 2
       ao.df$uni[nna][bs.start[i]:bs.end[i]] <- TRUE
