@@ -27,6 +27,7 @@ library(optparse)
 library(EaCoN)
 library(parallel)
 library(Biobase)
+library(foreach)
 
 option_list <- list(
   make_option(c("-i", "--idx"), type="integer", default=NULL,
@@ -113,7 +114,8 @@ opt <- parse_args(opt_parser)
 }
 
 
-
+# opt$pdir <- '/mnt/work1/users/pughlab/projects/cancer_cell_lines'
+# opt$dataset <- '1000G'
 segmenter <- 'ASCAT'
 dataset <- opt$dataset  #'GDSC', 'CCLE', 'GNE'
 pdir <- file.path(opt$pdir, dataset)
@@ -124,6 +126,7 @@ message(paste0("Searching for CEL$ files in: ", file.path(pdir, "data")))
 CEL.dir <- file.path(pdir, "data")
 sample.paths <- list.files(CEL.dir, pattern="CEL$", recursive = T, 
                          ignore.case = T, full.names = T)
+#sample.paths <- sample.paths[1:200]
 sample.ids <- gsub(".cel", "", basename(sample.paths), ignore.case = TRUE)
 regm <- regexpr(".cel", basename(sample.paths), ignore.case=T)
 cel.suffix <- regmatches(x = basename(sample.paths), m = regm)
@@ -185,9 +188,9 @@ if(dataset=='GNE'){
 } else {
   mclapply(sample.ids, function(sample, sample.paths){
     idx <- grep(sample, basename(sample.paths))
-    SNP6.Process(CEL = file.path(CEL.dir, paste0(sample, cel.suffix[idx])), 
+    EaCoN:::SNP6.Process(CEL = file.path(CEL.dir, paste0(sample, cel.suffix[idx])), 
                  samplename = sample)
-  }, sample.paths=sample.paths, mc.cores = 2)
+  }, sample.paths=sample.paths, mc.cores = 4)
 }
 
 

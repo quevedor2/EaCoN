@@ -1,3 +1,21 @@
+# l2r.level = "normal"
+# method="rawcopy"
+# gc.renorm = TRUE
+# gc.rda = NULL
+# wave.renorm = TRUE
+# wave.rda = NULL
+# mingap = 1E+06
+# out.dir = getwd()
+# oschp.keep = FALSE
+# force.OS = NULL
+# apt.version = "1.20.0"
+# apt.build = "na35.r1"
+# genome.pkg = "BSgenome.Hsapiens.UCSC.hg19"
+# return.data = FALSE
+# write.data = TRUE
+# plot = TRUE
+# force = FALSE
+
 ## Performs CS CEL processing
 SNP6.Process <- function(CEL = NULL, samplename = NULL, 
                          l2r.level = "normal", method="rawcopy",
@@ -75,10 +93,11 @@ SNP6.Process <- function(CEL = NULL, samplename = NULL,
   
   ## Processing CEL to an OSCHP file
   if(method=='rawcopy'){
-    oscf <- apt.snp6.process(CEL = CEL, samplename = samplename, out.dir = out.dir, temp.files.keep = FALSE, force.OS = force.OS, apt.build = apt.build)
+    oscf <- apt.snp6.process(CEL = CEL, samplename = samplename, out.dir = out.dir, 
+                             temp.files.keep = FALSE, force.OS = force.OS, apt.build = apt.build)
     
     ## Reading OSCHP
-    # tmsg("Loading OSCHP file ...")
+    tmsg("Loading OSCHP file ...")
     my.oschp <- oschp.load(file = oscf)
     sex.chr <- c("chrX", "chrY")
     
