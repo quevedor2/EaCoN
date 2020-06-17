@@ -11,6 +11,9 @@ Build.OMNI25(illumina.dir, parent.dir)
 
 \item{parent.dir}{}
 }
+\value{
+
+}
 \description{
 Build.OMNI25
 }

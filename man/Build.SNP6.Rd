@@ -4,8 +4,16 @@
 \alias{Build.SNP6}
 \title{Build.SNP6}
 \usage{
-Build.SNP6(ao.df, meta.b, affy.meta, CEL, sex.chr, samplename, cs,
-  num.cores = 4)
+Build.SNP6(
+  ao.df,
+  meta.b,
+  affy.meta,
+  CEL,
+  sex.chr,
+  samplename,
+  cs,
+  num.cores = 4
+)
 }
 \arguments{
 \item{ao.df}{}
@@ -21,6 +29,9 @@ Build.SNP6(ao.df, meta.b, affy.meta, CEL, sex.chr, samplename, cs,
 \item{samplename}{}
 
 \item{cs}{}
+}
+\value{
+
 }
 \description{
 Build.SNP6

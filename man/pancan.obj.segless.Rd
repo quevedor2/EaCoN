@@ -4,12 +4,14 @@
 \name{pancan.obj.segless}
 \alias{pancan.obj.segless}
 \title{Pre-processed TCGA Pancancer Atlas data}
-\format{A list with three elements:
+\format{
+A list with three elements:
 \describe{
  \item{AP-meta}{A dataframe containing metadata of all annotated samples with ploidy}
  \item{APS-meta}{A dataframe containing metadata of all annotated samples with ploidy and seg files}
  \item{breaks}{A list of 4 matrices containing binned frequencies for: 'purity', 'ploidy', 'cancerDNA fraction', 'subclonal fraction'}
-}}
+}
+}
 \source{
 \href{https://gdc.cancer.gov/about-data/publications/pancanatlas}{PanCancer Atlas}
 ABSOLUTE-annotated seg file - TCGA_mastercalls.abs_segtabs.fixed.txt 

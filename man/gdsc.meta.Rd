@@ -4,7 +4,9 @@
 \name{gdsc.meta}
 \alias{gdsc.meta}
 \title{GDSC Metadata}
-\format{A dataframe containing GDSC metadata:}
+\format{
+A dataframe containing GDSC metadata:
+}
 \source{
 \href{https://www.cancerrxgene.org/downloads/bulk_download}{GDSC metadata}
 All cell lines screened 	Cell-line-annotation

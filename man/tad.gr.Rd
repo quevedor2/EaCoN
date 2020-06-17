@@ -4,7 +4,12 @@
 \name{tad.gr}
 \alias{tad.gr}
 \title{Consensus TAD GenomicRanges}
-\format{A GenomicRanges object containing condensed TADs and their jaccard index cutoff}
+\format{
+A GenomicRanges object containing condensed TADs and their jaccard index cutoff
+}
+\source{
+
+}
 \usage{
 data(consensusTAD)
 }

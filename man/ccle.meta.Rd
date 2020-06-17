@@ -4,7 +4,9 @@
 \name{ccle.meta}
 \alias{ccle.meta}
 \title{CCLE Metadata}
-\format{A dataframe containing CCLE metadata:}
+\format{
+A dataframe containing CCLE metadata:
+}
 \source{
 \href{https://data.broadinstitute.org/ccle/Cell_lines_annotations_20181226.txt}{CCLE metadata}
 CCLE_sample_info_file_2012-10-18.txt

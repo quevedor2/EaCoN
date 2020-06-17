@@ -4,8 +4,16 @@
 \alias{annotateRDS}
 \title{Annotate CNV}
 \usage{
-annotateRDS(fit.val, sample, segmenter, build = "hg19",
-  bin.size = 50000, feature.set = c("bins"), ...)
+annotateRDS(
+  fit.val,
+  sample,
+  segmenter,
+  build = "hg19",
+  bin.size = 50000,
+  feature.set = c("bins"),
+  load.l2r = TRUE,
+  ...
+)
 }
 \arguments{
 \item{fit.val}{A dataframe of the *.gammaEval.txt file}
