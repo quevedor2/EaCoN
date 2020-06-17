@@ -2,6 +2,7 @@
 ## Instal ASCAT and FACETS
 install.pkg <- FALSE
 if(install.pkg){
+  devtools::install_github("quevedor2/EaCoN")
   devtools::install_github("Crick-CancerGenomics/ascat/ASCAT")
   devtools::install_github("mskcc/facets")
   
